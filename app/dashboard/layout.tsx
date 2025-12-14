@@ -1,14 +1,26 @@
 import type { ReactNode } from "react";
+import { redirect } from "next/navigation";
+import { getServerSession } from "@/lib/supabase/server";
+import { DashboardShell } from "@/components/layout/dashboard-shell";
+import { createLogoutAction } from "@/lib/supabase/logout-action";
 
 export const metadata = {
   title: "ArchTruth Dashboard",
 };
 
-export default function DashboardLayout({ children }: { children: ReactNode }) {
+export default async function DashboardLayout({ children }: { children: ReactNode }) {
+  const session = await getServerSession();
+  if (!session?.user) {
+    redirect("/login");
+  }
+
+  const profile = session.user.user_metadata || {};
+  const logoutAction = createLogoutAction();
+
   return (
-    <main className="container">
-      <div className="card">{children}</div>
-    </main>
+    <DashboardShell userName={profile.full_name || profile.name} userAvatar={profile.avatar_url} onLogout={logoutAction}>
+      {children}
+    </DashboardShell>
   );
 }
 

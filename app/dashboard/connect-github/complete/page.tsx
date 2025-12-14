@@ -8,6 +8,8 @@ type Props = {
 export default async function ConnectGithubComplete({ searchParams }: Props) {
   const installationIdRaw = searchParams["installation_id"];
   const installationId = Array.isArray(installationIdRaw) ? installationIdRaw[0] : installationIdRaw;
+  const stateOrgRaw = searchParams["state"];
+  const stateOrg = Array.isArray(stateOrgRaw) ? stateOrgRaw[0] : stateOrgRaw;
 
   if (!installationId) {
     return (
@@ -30,16 +32,31 @@ export default async function ConnectGithubComplete({ searchParams }: Props) {
 
   try {
     const token = session.access_token;
-    await backendFetch("/installations/bootstrap", token, { method: "POST" });
+    // If state (org_id) provided, skip bootstrap; otherwise ensure org.
+    if (!stateOrg) {
+      await backendFetch("/installations/bootstrap", token, { method: "POST" });
+    }
     await backendFetch("/installations/link", token, {
       method: "POST",
-      body: JSON.stringify({ installation_id: Number(installationId) }),
+      body: JSON.stringify({
+        installation_id: Number(installationId),
+        organization_id: stateOrg || undefined,
+      }),
     });
 
     return (
       <>
         <h1>Installation linked</h1>
-        <p>Installation {installationId} has been linked to your organization.</p>
+        <p>
+          Installation {installationId} has been linked to {stateOrg ? `org ${stateOrg}` : "your organization"}.
+        </p>
+        <p>
+          Continue to{" "}
+          <a href={`/dashboard/repos?org_id=${stateOrg || ""}`} className="underline">
+            repositories
+          </a>{" "}
+          to connect a repo.
+        </p>
       </>
     );
   } catch (err: any) {
