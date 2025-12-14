@@ -8,20 +8,22 @@ if (!supabaseUrl || !supabaseAnonKey) {
   throw new Error("Supabase env vars are not set");
 }
 
-const cookieAdapter = {
-  get(name: string) {
-    return cookies().get(name)?.value;
-  },
-  set(name: string, value: string, options: CookieOptions) {
-    cookies().set({ name, value, ...options });
-  },
-  remove(name: string, options: CookieOptions) {
-    cookies().set({ name, value: "", ...options, maxAge: 0 });
-  },
-};
-
 export function getSupabaseServerClient() {
-  return createServerClient(supabaseUrl, supabaseAnonKey, {
+  const cookieAdapter = {
+    get(name: string) {
+      return cookies().get(name)?.value;
+    },
+    set(name: string, value: string, options: CookieOptions) {
+      cookies().set({ name, value, ...options });
+    },
+    remove(name: string, options: CookieOptions) {
+      cookies().set({ name, value: "", ...options, maxAge: 0 });
+    },
+  };
+
+  // TypeScript doesn't narrow types after runtime checks, so we use non-null assertions
+  // since we've already validated these values exist above
+  return createServerClient(supabaseUrl!, supabaseAnonKey!, {
     cookies: cookieAdapter,
   });
 }
