@@ -103,3 +103,30 @@ export async function backendFetch<T>(
   return (await resp.json()) as T;
 }
 
+export async function listDocuments(repoId: number, token: string) {
+  return backendFetch<{ documents: { id: number; file_path: string; r2_url: string }[] }>(
+    `/documents/by-repo/${repoId}`,
+    token
+  );
+}
+
+export async function presignDocument(docId: number, token: string) {
+  return backendFetch<{ url: string }>(`/documents/${docId}/presigned`, token);
+}
+
+export async function chatStream(
+  token: string,
+  body: { query: string; repo_ids?: number[] },
+  signal?: AbortSignal
+): Promise<Response> {
+  return fetch(`${backendUrl}/chat`, {
+    method: "POST",
+    body: JSON.stringify(body),
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    signal,
+  });
+}
+
