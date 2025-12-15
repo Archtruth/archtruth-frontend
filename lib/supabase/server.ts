@@ -29,7 +29,18 @@ export function getSupabaseServerClient() {
 
 export async function getServerSession() {
   const supabase = getSupabaseServerClient();
-  const { data } = await supabase.auth.getSession();
-  return data.session;
+
+  const [{ data: userData }, { data: sessionData }] = await Promise.all([
+    supabase.auth.getUser(),
+    supabase.auth.getSession(),
+  ]);
+
+  if (!userData?.user || !sessionData?.session) {
+    return null;
+  }
+
+  // Prefer the authenticated user returned from getUser to avoid trusting
+  // unsigned session payloads.
+  return { ...sessionData.session, user: userData.user };
 }
 
