@@ -1,12 +1,14 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { backendFetch } from "@/lib/api/backend";
 import { getServerSession } from "@/lib/supabase/server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { ConnectGithubSkeleton } from "@/components/ui/loading-skeleton";
 
 const installUrl = process.env.NEXT_PUBLIC_GITHUB_APP_INSTALL_URL || "#";
 
-export default async function ConnectGithub({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
+async function ConnectGithubContent({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
   const session = await getServerSession();
   const token = session?.access_token;
   if (!token) {
@@ -68,7 +70,7 @@ export default async function ConnectGithub({ searchParams }: { searchParams: Re
               After installing, GitHub will redirect you back with <code>installation_id</code> and <code>state</code>.
               We’ll then call the backend to link the installation.
             </div>
-            <a href={`${installUrl}?state=${selectedOrgId}`} target="_blank" rel="noreferrer">
+            <a href={`${installUrl}?state=${selectedOrgId}`}>
               <Button>Install GitHub App</Button>
             </a>
             <div className="text-xs text-mutedForeground">
@@ -78,6 +80,14 @@ export default async function ConnectGithub({ searchParams }: { searchParams: Re
         </Card>
       ) : null}
     </div>
+  );
+}
+
+export default function ConnectGithub({ searchParams }: { searchParams: Record<string, string | string[] | undefined> }) {
+  return (
+    <Suspense fallback={<ConnectGithubSkeleton />}>
+      <ConnectGithubContent searchParams={searchParams} />
+    </Suspense>
   );
 }
 

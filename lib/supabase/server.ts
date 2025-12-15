@@ -1,5 +1,5 @@
 import { cookies } from "next/headers";
-import { createServerClient, type CookieOptions } from "@supabase/ssr";
+import { createServerClient } from "@supabase/ssr";
 
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
@@ -9,22 +9,21 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 export function getSupabaseServerClient() {
-  const cookieAdapter = {
-    get(name: string) {
-      return cookies().get(name)?.value;
-    },
-    set(name: string, value: string, options: CookieOptions) {
-      cookies().set({ name, value, ...options });
-    },
-    remove(name: string, options: CookieOptions) {
-      cookies().set({ name, value: "", ...options, maxAge: 0 });
-    },
-  };
-
-  // TypeScript doesn't narrow types after runtime checks, so we use non-null assertions
-  // since we've already validated these values exist above
+  const cookieStore = cookies();
+  
   return createServerClient(supabaseUrl!, supabaseAnonKey!, {
-    cookies: cookieAdapter,
+    cookies: {
+      get(name: string) {
+        return cookieStore.get(name)?.value;
+      },
+      set() {
+        // NO-OP: Cookie writes handled by middleware
+        // This prevents the "Cookies can only be modified" error
+      },
+      remove() {
+        // NO-OP: Cookie writes handled by middleware
+      },
+    },
   });
 }
 

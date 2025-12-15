@@ -1,8 +1,10 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { backendFetch } from "@/lib/api/backend";
 import { getServerSession } from "@/lib/supabase/server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { DashboardSkeleton } from "@/components/ui/loading-skeleton";
 
 async function ensureOrg() {
   "use server";
@@ -14,7 +16,7 @@ async function ensureOrg() {
   await backendFetch("/installations/bootstrap", token, { method: "POST" });
 }
 
-export default async function Dashboard() {
+async function DashboardContent() {
   const session = await getServerSession();
   const token = session?.access_token;
   if (!token) {
@@ -83,6 +85,14 @@ export default async function Dashboard() {
         </Card>
       )}
     </div>
+  );
+}
+
+export default function Dashboard() {
+  return (
+    <Suspense fallback={<DashboardSkeleton />}>
+      <DashboardContent />
+    </Suspense>
   );
 }
 

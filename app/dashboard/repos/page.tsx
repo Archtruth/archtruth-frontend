@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import Link from "next/link";
 import { backendFetch } from "@/lib/api/backend";
 import { getServerSession } from "@/lib/supabase/server";
@@ -5,12 +6,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, THead, TBody, TR, TH, TD } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { ReposSkeleton } from "@/components/ui/loading-skeleton";
 
 type Props = {
   searchParams: { [key: string]: string | string[] | undefined };
 };
 
-export default async function ReposPage({ searchParams }: Props) {
+async function ReposContent({ searchParams }: Props) {
   const session = await getServerSession();
   if (!session?.access_token) {
     return null;
@@ -175,6 +177,14 @@ export default async function ReposPage({ searchParams }: Props) {
         })
       )}
     </div>
+  );
+}
+
+export default function ReposPage({ searchParams }: Props) {
+  return (
+    <Suspense fallback={<ReposSkeleton />}>
+      <ReposContent searchParams={searchParams} />
+    </Suspense>
   );
 }
 
