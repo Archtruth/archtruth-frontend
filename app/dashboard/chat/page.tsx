@@ -5,7 +5,6 @@ import { ChatClient } from "./chat-client";
 export default function ChatPage() {
   return (
     <Suspense fallback={<div>Loading chat...</div>}>
-      {/* @ts-expect-error Async Server Component */}
       <ChatPageInner />
     </Suspense>
   );
