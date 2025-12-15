@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { LogOut, Github, Layers, Home, Plus, Trash2 } from "lucide-react";
+import { LogOut, Github, Layers, Home, Plus, Trash2, MessageSquare } from "lucide-react";
 
 export type NavItem = {
   label: string;
@@ -24,6 +24,7 @@ const navItems: NavItem[] = [
   { label: "Overview", href: "/dashboard", icon: <Home className="h-4 w-4" /> },
   { label: "Connect GitHub", href: "/dashboard/connect-github", icon: <Plus className="h-4 w-4" /> },
   { label: "Repositories", href: "/dashboard/repos", icon: <Layers className="h-4 w-4" /> },
+  { label: "Chat", href: "/dashboard/chat", icon: <MessageSquare className="h-4 w-4" /> },
 ];
 
 export function DashboardShell({ children, userName, userAvatar, onLogout, onDeleteAccount }: DashboardShellProps) {
