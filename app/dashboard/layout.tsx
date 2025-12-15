@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import { getServerSession } from "@/lib/supabase/server";
 import { DashboardShell } from "@/components/layout/dashboard-shell";
 import { createLogoutAction } from "@/lib/supabase/logout-action";
+import { deleteAccountAction } from "@/lib/supabase/delete-account-action";
 
 export const metadata = {
   title: "ArchTruth Dashboard",
@@ -18,7 +19,12 @@ export default async function DashboardLayout({ children }: { children: ReactNod
   const logoutAction = createLogoutAction();
 
   return (
-    <DashboardShell userName={profile.full_name || profile.name} userAvatar={profile.avatar_url} onLogout={logoutAction}>
+    <DashboardShell
+      userName={profile.full_name || profile.name}
+      userAvatar={profile.avatar_url}
+      onLogout={logoutAction}
+      onDeleteAccount={deleteAccountAction}
+    >
       {children}
     </DashboardShell>
   );

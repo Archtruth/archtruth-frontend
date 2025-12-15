@@ -2,7 +2,7 @@ import Link from "next/link";
 import { Avatar } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { LogOut, Github, Layers, Home, Plus } from "lucide-react";
+import { LogOut, Github, Layers, Home, Plus, Trash2 } from "lucide-react";
 
 export type NavItem = {
   label: string;
@@ -15,6 +15,7 @@ type DashboardShellProps = {
   userName?: string | null;
   userAvatar?: string | null;
   onLogout?: () => Promise<void> | void;
+  onDeleteAccount?: () => Promise<void> | void;
 };
 
 const navItems: NavItem[] = [
@@ -23,7 +24,7 @@ const navItems: NavItem[] = [
   { label: "Repositories", href: "/dashboard/repos", icon: <Layers className="h-4 w-4" /> },
 ];
 
-export function DashboardShell({ children, userName, userAvatar, onLogout }: DashboardShellProps) {
+export function DashboardShell({ children, userName, userAvatar, onLogout, onDeleteAccount }: DashboardShellProps) {
   return (
     <div className="min-h-screen bg-muted">
       <header className="sticky top-0 z-10 border-b border-border bg-white/80 backdrop-blur">
@@ -65,6 +66,24 @@ export function DashboardShell({ children, userName, userAvatar, onLogout }: Das
               </Link>
             ))}
           </nav>
+          {onDeleteAccount && (
+            <div className="mt-8 border-t border-border pt-4">
+              <form action={onDeleteAccount}>
+                <button
+                  type="submit"
+                  className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 hover:text-red-700"
+                  onClick={(e) => {
+                    if (!confirm("Are you sure you want to delete your account? This action cannot be undone and will delete all your data.")) {
+                      e.preventDefault();
+                    }
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete Account
+                </button>
+              </form>
+            </div>
+          )}
         </aside>
         <main className="space-y-6">
           {children}
