@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@radix-ui/react-avatar": "^1.1.11",
+    "@radix-ui/react-select": "^2.2.6",
     "@supabase/ssr": "^0.5.0",
     "@supabase/supabase-js": "^2.45.4",
     "@tailwindcss/typography": "^0.5.19",
