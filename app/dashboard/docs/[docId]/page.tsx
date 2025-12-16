@@ -4,6 +4,8 @@ import { presignDocument } from "@/lib/api/backend";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import ReactMarkdown from "react-markdown";
+import { ChevronLeft } from "lucide-react";
 
 type PageProps = {
   params: { docId: string };
@@ -34,21 +36,29 @@ export default async function DocPage({ params }: PageProps) {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Document #{docId}</h1>
+        <div className="flex items-center gap-2">
+            <Link href="/dashboard/repos">
+              <Button variant="ghost" size="icon">
+                  <ChevronLeft className="h-4 w-4" />
+              </Button>
+            </Link>
+            <h1 className="text-2xl font-semibold">Document Viewer</h1>
+        </div>
         <Link href="/dashboard/repos">
           <Button variant="outline">Back to repos</Button>
         </Link>
       </div>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Markdown</CardTitle>
+        <CardHeader className="bg-muted/30 border-b">
+          <CardTitle className="font-mono text-sm">Doc ID: {docId}</CardTitle>
         </CardHeader>
-        <CardContent>
-          <pre className="whitespace-pre-wrap text-sm font-mono">{markdown}</pre>
+        <CardContent className="p-8">
+          <article className="prose dark:prose-invert max-w-none">
+            <ReactMarkdown>{markdown}</ReactMarkdown>
+          </article>
         </CardContent>
       </Card>
     </div>
   );
 }
-
