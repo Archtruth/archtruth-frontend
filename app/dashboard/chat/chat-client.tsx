@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type Citation = { doc_id?: number; file_path?: string; similarity?: number };
 
@@ -20,16 +19,13 @@ type Message = {
   id: string;
 };
 
-type Repo = { id: number; full_name: string };
-
-export function ChatClient({ token, orgId, repos }: { token: string; orgId?: string; repos: Repo[] }) {
+export function ChatClient({ token }: { token: string }) {
   const [query, setQuery] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const [selectedRepoId, setSelectedRepoId] = useState<string>("all");
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -58,9 +54,7 @@ export function ChatClient({ token, orgId, repos }: { token: string; orgId?: str
     }));
 
     try {
-      const repo_ids =
-        selectedRepoId === "all" ? undefined : [Number(selectedRepoId)];
-      const resp = await chatStream(token, { query: currentQuery, history, repo_ids }, controller.signal);
+      const resp = await chatStream(token, { query: currentQuery, history }, controller.signal);
       const reader = resp.body?.getReader();
       if (!reader) throw new Error("No response body");
       const decoder = new TextDecoder();
@@ -121,25 +115,6 @@ export function ChatClient({ token, orgId, repos }: { token: string; orgId?: str
       </div>
 
       <Card className="flex-1 flex flex-col overflow-hidden shadow-md">
-        <div className="px-4 pt-4 flex flex-wrap gap-3 items-center">
-          <div className="text-sm text-mutedForeground">
-            Scope: {selectedRepoId === "all" ? "All accessible repos" : "Repo scoped"}
-          </div>
-          <Select value={selectedRepoId} onValueChange={setSelectedRepoId}>
-            <SelectTrigger className="w-[260px]">
-              <SelectValue placeholder="Select repository scope" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All repositories</SelectItem>
-              {repos.map((r) => (
-                <SelectItem key={r.id} value={r.id.toString()}>
-                  {r.full_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
         <div className="flex-1 overflow-y-auto p-4 space-y-6" ref={scrollRef}>
           {messages.length === 0 ? (
             <div className="flex flex-col items-center justify-center h-full text-mutedForeground opacity-50">

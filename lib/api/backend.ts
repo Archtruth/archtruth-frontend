@@ -114,21 +114,6 @@ export async function listDocuments(repoId: number, token: string) {
   }>(`/documents/by-repo/${repoId}`, token);
 }
 
-export async function listOrgRepos(orgId: string, token: string) {
-  return backendFetch<{ repositories: { id: number; full_name: string }[] }>(
-    `/orgs/${orgId}/repositories`,
-    token
-  );
-}
-
-export async function getRepoFunctions(repoId: number, token: string, q?: string) {
-  const search = q ? `?q=${encodeURIComponent(q)}` : "";
-  return backendFetch<{ functions: any[] }>(`/intelligence/repos/${repoId}/functions${search}`, token);
-}
-
-export async function getRepoCapabilities(repoId: number, token: string) {
-  return backendFetch<{ capabilities: any[] }>(`/intelligence/repos/${repoId}/capabilities`, token);
-}
 export async function presignDocument(docId: number, token: string) {
   return backendFetch<{ url: string }>(`/documents/${docId}/presigned`, token);
 }
