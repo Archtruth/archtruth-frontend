@@ -90,7 +90,7 @@ export function HomeClient({ initialLoginOpen = false, initialError }: HomeClien
           <div className="mx-auto flex max-w-[58rem] flex-col items-center space-y-4 text-center">
             <h2 className="font-heading text-3xl font-bold leading-[1.1] sm:text-3xl md:text-6xl">Features</h2>
             <p className="max-w-[85%] leading-normal text-mutedForeground sm:text-lg sm:leading-7">
-              Built on top of Supabase, FastAPI, and advanced LLMs to deliver accurate technical documentation.
+              Built using latest LLMs to deliver accurate technical documentation.
             </p>
           </div>
           <div className="mx-auto grid justify-center gap-4 sm:grid-cols-2 md:max-w-[64rem] md:grid-cols-3">
@@ -149,11 +149,6 @@ export function HomeClient({ initialLoginOpen = false, initialError }: HomeClien
             <a href="#" className="font-medium underline underline-offset-4">
               ArchTruth
             </a>
-            . The source code is available on{" "}
-            <a href="#" className="font-medium underline underline-offset-4">
-              GitHub
-            </a>
-            .
           </p>
         </div>
       </footer>
