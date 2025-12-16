@@ -48,8 +48,13 @@ export function ChatClient({ token }: { token: string }) {
     const controller = new AbortController();
     abortRef.current = controller;
 
+    const history = messages.map((m) => ({
+      role: m.role,
+      content: m.content,
+    }));
+
     try {
-      const resp = await chatStream(token, { query: currentQuery }, controller.signal);
+      const resp = await chatStream(token, { query: currentQuery, history }, controller.signal);
       const reader = resp.body?.getReader();
       if (!reader) throw new Error("No response body");
       const decoder = new TextDecoder();

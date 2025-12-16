@@ -130,7 +130,7 @@ export async function disconnectRepo(repoId: number, token: string) {
 
 export async function chatStream(
   token: string,
-  body: { query: string; repo_ids?: number[] },
+  body: { query: string; repo_ids?: number[]; history?: { role: string; content: string }[] },
   signal?: AbortSignal
 ): Promise<Response> {
   return fetch(`${backendUrl}/chat`, {
