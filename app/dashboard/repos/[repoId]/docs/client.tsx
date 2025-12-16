@@ -2,17 +2,27 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { presignDocument } from "@/lib/api/backend";
+import { getRepoFunctions, presignDocument } from "@/lib/api/backend";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FileText, ChevronLeft, Calendar, Loader } from "lucide-react";
+import { FileText, ChevronLeft, Calendar, Loader, Search } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
 type Document = {
   id: number;
   file_path: string;
   updated_at?: string;
+};
+
+type FunctionRow = {
+  function_name: string;
+  file_path: string;
+  line_start?: number;
+  line_end?: number;
+  role?: string;
+  description?: string;
 };
 
 async function fetchDocumentContent(docId: number, token: string): Promise<string> {
@@ -33,6 +43,9 @@ export function RepoDocsPageClient({ repoId, token, backHref, docs }: {
   const [selectedDocId, setSelectedDocId] = useState<string>("");
   const [markdown, setMarkdown] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const [functions, setFunctions] = useState<FunctionRow[]>([]);
+  const [funcQuery, setFuncQuery] = useState("");
+  const [loadingFunctions, setLoadingFunctions] = useState(false);
 
   useEffect(() => {
     if (selectedDocId && docs.length > 0) {
@@ -52,7 +65,25 @@ export function RepoDocsPageClient({ repoId, token, backHref, docs }: {
     }
   }, [selectedDocId, token, docs]);
 
+  useEffect(() => {
+    const loadFunctions = async () => {
+      setLoadingFunctions(true);
+      try {
+        const res = await getRepoFunctions(repoId, token, funcQuery || undefined);
+        setFunctions(res.functions || []);
+      } catch (error) {
+        console.error("Failed to load functions:", error);
+        setFunctions([]);
+      } finally {
+        setLoadingFunctions(false);
+      }
+    };
+    loadFunctions();
+  }, [repoId, token, funcQuery]);
+
   const selectedDoc = docs.find(d => d.id.toString() === selectedDocId);
+  const canonicalDocs = ["overview.md", "architecture.md", "api.md", "files.md", "implementation.md"];
+  const availableCanon = docs.filter((d) => canonicalDocs.includes(d.file_path));
 
   return (
     <div className="space-y-6">
@@ -84,6 +115,20 @@ export function RepoDocsPageClient({ repoId, token, backHref, docs }: {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
+          {availableCanon.length > 0 && (
+            <div className="flex flex-wrap gap-2">
+              {availableCanon.map((doc) => (
+                <Button
+                  key={doc.id}
+                  size="sm"
+                  variant={selectedDocId === doc.id.toString() ? "default" : "outline"}
+                  onClick={() => setSelectedDocId(doc.id.toString())}
+                >
+                  {doc.file_path}
+                </Button>
+              ))}
+            </div>
+          )}
           {docs.length === 0 ? (
              <div className="flex flex-col items-center justify-center py-12 text-center">
                  <div className="bg-muted p-4 rounded-full mb-4">
@@ -155,6 +200,60 @@ export function RepoDocsPageClient({ repoId, token, backHref, docs }: {
           )}
         </CardContent>
       </Card>
+
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Search className="h-5 w-5" />
+              Functions
+            </CardTitle>
+            <CardDescription>Function-level inventory from semantic extraction.</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            <div className="flex items-center gap-2">
+              <Input
+                placeholder="Filter by function or file"
+                value={funcQuery}
+                onChange={(e) => setFuncQuery(e.target.value)}
+              />
+            </div>
+            {loadingFunctions ? (
+              <div className="flex items-center gap-2 text-sm text-mutedForeground">
+                <Loader className="h-4 w-4 animate-spin" />
+                Loading functions...
+              </div>
+            ) : functions.length === 0 ? (
+              <div className="text-sm text-mutedForeground">No functions found.</div>
+            ) : (
+              <div className="space-y-2">
+                {functions.map((fn, idx) => (
+                  <div key={idx} className="border rounded p-3 text-sm space-y-1">
+                    <div className="font-medium">{fn.function_name}</div>
+                    <div className="text-mutedForeground">
+                      {fn.file_path}
+                      {fn.line_start && fn.line_end ? ` (${fn.line_start}-${fn.line_end})` : ""}
+                    </div>
+                    {fn.role && <div className="text-xs uppercase tracking-wide text-mutedForeground">{fn.role}</div>}
+                    {fn.description && <div className="text-sm">{fn.description}</div>}
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="px-0"
+                      onClick={() => {
+                        const impl = docs.find((d) => d.file_path === "implementation.md");
+                        if (impl) {
+                          setSelectedDocId(impl.id.toString());
+                        }
+                      }}
+                    >
+                      View in implementation.md
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </CardContent>
+        </Card>
     </div>
   );
 }
