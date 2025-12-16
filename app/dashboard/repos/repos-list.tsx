@@ -101,6 +101,10 @@ export function ReposList({
     return connected.latest_job?.status || "connected";
   };
 
+  const getConnectedRepo = (githubRepoId: number) => {
+    return connectedRepos.find((r) => r.github_repo_id === githubRepoId) || null;
+  };
+
   const StatusBadge = ({ status }: { status: string }) => {
     switch (status) {
       case "pending":
@@ -191,7 +195,17 @@ export function ReposList({
                                 <Button size="sm" variant="outline" disabled>
                                     Connected
                                 </Button>
-                                <Button size="sm" onClick={() => router.push(`/dashboard/repos/${repo.id}/docs`)}>
+                                <Button
+                                  size="sm"
+                                  onClick={() => {
+                                    const connected = getConnectedRepo(repo.id);
+                                    if (!connected) {
+                                      alert("Repository is connected, but its internal ID wasn't found yet. Please wait a moment and try again.");
+                                      return;
+                                    }
+                                    router.push(`/dashboard/repos/${connected.id}/docs?org_id=${orgId}`);
+                                  }}
+                                >
                                     View Docs
                                 </Button>
                               </div>

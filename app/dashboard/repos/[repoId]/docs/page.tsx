@@ -11,7 +11,7 @@ type PageProps = {
   searchParams?: { org_id?: string };
 };
 
-export default async function RepoDocsPage({ params }: PageProps) {
+export default async function RepoDocsPage({ params, searchParams }: PageProps) {
   const session = await getServerSession();
   if (!session?.access_token) {
     return null;
@@ -22,11 +22,13 @@ export default async function RepoDocsPage({ params }: PageProps) {
   const docsResp = await listDocuments(repoId, token);
   const docs = docsResp.documents || [];
 
+  const backHref = searchParams?.org_id ? `/dashboard/repos?org_id=${encodeURIComponent(searchParams.org_id)}` : "/dashboard/repos";
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
-            <Link href="/dashboard/repos">
+            <Link href={backHref}>
               <Button variant="ghost" size="icon">
                   <ChevronLeft className="h-4 w-4" />
               </Button>
@@ -36,7 +38,7 @@ export default async function RepoDocsPage({ params }: PageProps) {
                 <p className="text-mutedForeground">View generated documentation for this repository.</p>
             </div>
         </div>
-        <Link href="/dashboard/repos">
+        <Link href={backHref}>
           <Button variant="outline">Back to repos</Button>
         </Link>
       </div>
@@ -61,7 +63,7 @@ export default async function RepoDocsPage({ params }: PageProps) {
                  <p className="text-mutedForeground max-w-sm mt-2">
                      Trigger a sync from the repositories page to generate documentation for this repo.
                  </p>
-                 <Link href="/dashboard/repos" className="mt-4">
+                 <Link href={backHref} className="mt-4">
                      <Button>Go to Repositories</Button>
                  </Link>
              </div>
