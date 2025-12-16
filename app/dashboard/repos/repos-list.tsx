@@ -186,7 +186,7 @@ export function ReposList({
                              )}
                           </TD>
                           <TD className="text-right">
-                            {status === "completed" || status === "ready" ? (
+                            {status === "completed" || status === "connected" ? (
                               <div className="flex justify-end gap-2">
                                 <Button size="sm" variant="outline" disabled>
                                     Connected

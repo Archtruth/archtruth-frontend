@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { Avatar } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { LogOut, Github, Layers, Home, Plus, Trash2, MessageSquare } from "lucide-react";
+import { LogOut, Github, Layers, Home, Plus, Trash2, MessageSquare, User } from "lucide-react";
 
 export type NavItem = {
   label: string;
@@ -37,7 +37,12 @@ export function DashboardShell({ children, userName, userAvatar, onLogout, onDel
             <span className="text-lg font-semibold">ArchTruth</span>
           </div>
           <div className="flex items-center gap-3">
-            <Avatar src={userAvatar || undefined} name={userName || undefined} />
+             <Avatar>
+                <AvatarImage src={userAvatar || ""} alt={userName || "User"} />
+                <AvatarFallback>
+                    {userName ? userName[0].toUpperCase() : <User className="h-4 w-4" />}
+                </AvatarFallback>
+             </Avatar>
             <div className="text-sm">
               <div className="font-semibold leading-tight">{userName || "User"}</div>
             </div>

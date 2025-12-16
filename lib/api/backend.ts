@@ -104,10 +104,14 @@ export async function backendFetch<T>(
 }
 
 export async function listDocuments(repoId: number, token: string) {
-  return backendFetch<{ documents: { id: number; file_path: string; r2_url: string }[] }>(
-    `/documents/by-repo/${repoId}`,
-    token
-  );
+  return backendFetch<{
+    documents: {
+      id: number;
+      file_path: string;
+      r2_url: string;
+      updated_at?: string;
+    }[];
+  }>(`/documents/by-repo/${repoId}`, token);
 }
 
 export async function presignDocument(docId: number, token: string) {
