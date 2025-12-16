@@ -57,7 +57,7 @@ export function HomeClient({ initialLoginOpen = false, initialError }: HomeClien
       </header>
 
       <main className="flex-1">
-        <section className="space-y-6 pb-8 pt-12 md:pb-12 md:pt-20 lg:py-32">
+        <section className="flex min-h-[calc(100vh-3.5rem)] flex-col items-center justify-center space-y-6 py-8 md:py-12 lg:py-24">
           <div className="container mx-auto flex max-w-[64rem] flex-col items-center gap-6 px-6 text-center">
             <h1 className="font-heading text-4xl font-bold sm:text-5xl md:text-6xl lg:text-7xl">
               Documentation that <br /> writes itself.
@@ -86,8 +86,8 @@ export function HomeClient({ initialLoginOpen = false, initialError }: HomeClien
               Built using latest LLMs to deliver accurate technical documentation.
             </p>
           </div>
-          <div className="mx-auto grid justify-center gap-4 sm:grid-cols-2 md:max-w-[64rem] md:grid-cols-3">
-            <Card className="flex flex-col items-center text-center p-4">
+          <div className="mx-auto flex flex-wrap justify-center gap-6 md:max-w-[64rem]">
+            <Card className="flex w-full max-w-[300px] flex-col items-center text-center p-4">
               <CardHeader>
                 <Github className="h-10 w-10 text-primary mb-2" />
                 <CardTitle>GitHub Integration</CardTitle>
@@ -98,7 +98,7 @@ export function HomeClient({ initialLoginOpen = false, initialError }: HomeClien
                 </p>
               </CardContent>
             </Card>
-            <Card className="flex flex-col items-center text-center p-4">
+            <Card className="flex w-full max-w-[300px] flex-col items-center text-center p-4">
               <CardHeader>
                 <Zap className="h-10 w-10 text-primary mb-2" />
                 <CardTitle>Instant Analysis</CardTitle>
@@ -109,7 +109,7 @@ export function HomeClient({ initialLoginOpen = false, initialError }: HomeClien
                 </p>
               </CardContent>
             </Card>
-            <Card className="flex flex-col items-center text-center p-4">
+            <Card className="flex w-full max-w-[300px] flex-col items-center text-center p-4">
               <CardHeader>
                 <FileText className="h-10 w-10 text-primary mb-2" />
                 <CardTitle>Auto-Docs</CardTitle>
@@ -120,7 +120,7 @@ export function HomeClient({ initialLoginOpen = false, initialError }: HomeClien
                 </p>
               </CardContent>
             </Card>
-            <Card className="flex flex-col items-center text-center p-4">
+            <Card className="flex w-full max-w-[300px] flex-col items-center text-center p-4">
               <CardHeader>
                 <Database className="h-10 w-10 text-primary mb-2" />
                 <CardTitle>Knowledge Base</CardTitle>
