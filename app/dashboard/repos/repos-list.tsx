@@ -55,24 +55,39 @@ export function ReposList({
   const [repoToDisconnect, setRepoToDisconnect] = useState<{ id: number; full_name: string } | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
 
-  // Poll for updates on connected repos
+  const hasTransientRepoState = connectedRepos.some((r) => {
+    const s = r.latest_job?.status;
+    return s === "pending" || s === "processing";
+  });
+  const hasConnecting = Object.values(connectingMap).some(Boolean);
+  const shouldPoll = hasTransientRepoState || hasConnecting;
+
+  // Poll for updates only when something is in a transient state
   useEffect(() => {
-    const interval = setInterval(async () => {
+    if (!shouldPoll) return;
+
+    let cancelled = false;
+
+    async function pollOnce() {
       try {
-        const res = await backendFetch<{ repositories: ConnectedRepo[] }>(
-          `/orgs/${orgId}/repositories`,
-          token
-        );
-        if (res.repositories) {
+        const res = await backendFetch<{ repositories: ConnectedRepo[] }>(`/orgs/${orgId}/repositories`, token);
+        if (!cancelled && res.repositories) {
           setConnectedRepos(res.repositories);
         }
       } catch (e) {
         console.error("Failed to poll repos", e);
       }
-    }, 5000); // Poll every 5 seconds
+    }
 
-    return () => clearInterval(interval);
-  }, [orgId, token]);
+    // Fetch immediately, then keep polling.
+    pollOnce();
+    const interval = setInterval(pollOnce, 5000);
+
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
+  }, [shouldPoll, orgId, token]);
 
   const handleConnect = async (installId: number, repo: Repo) => {
     setConnectingMap((prev) => ({ ...prev, [repo.id]: true }));
