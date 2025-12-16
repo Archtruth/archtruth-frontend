@@ -134,7 +134,7 @@ export function HomeClient({ initialLoginOpen = false, initialError }: HomeClien
               </CardHeader>
               <CardContent>
                 <p className="text-mutedForeground">
-                  Chat with your documentation to find answers instantly using semantic search.
+                  Chat with your documentation to find answers instantly.
                 </p>
               </CardContent>
             </Card>
