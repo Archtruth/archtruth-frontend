@@ -118,6 +118,16 @@ export async function presignDocument(docId: number, token: string) {
   return backendFetch<{ url: string }>(`/documents/${docId}/presigned`, token);
 }
 
+export async function disconnectRepo(repoId: number, token: string) {
+  return backendFetch<{ message: string; repo_id: number }>(
+    `/installations/disconnect-repo/${repoId}`,
+    token,
+    {
+      method: "DELETE",
+    }
+  );
+}
+
 export async function chatStream(
   token: string,
   body: { query: string; repo_ids?: number[] },

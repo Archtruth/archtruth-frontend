@@ -6,9 +6,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
-import { backendFetch } from "@/lib/api/backend";
+import { Modal } from "@/components/ui/modal";
+import { backendFetch, disconnectRepo } from "@/lib/api/backend";
 import { Loader } from "@/components/ui/loader";
-import { CheckCircle2, Circle, Clock, AlertCircle, RefreshCw } from "lucide-react";
+import { CheckCircle2, Circle, Clock, AlertCircle, RefreshCw, X } from "lucide-react";
 
 type Repo = {
   id: number;
@@ -50,6 +51,9 @@ export function ReposList({
   const router = useRouter();
   const [connectedRepos, setConnectedRepos] = useState<ConnectedRepo[]>(initialConnectedRepos);
   const [connectingMap, setConnectingMap] = useState<Record<number, boolean>>({});
+  const [disconnectModalOpen, setDisconnectModalOpen] = useState(false);
+  const [repoToDisconnect, setRepoToDisconnect] = useState<{ id: number; full_name: string } | null>(null);
+  const [disconnecting, setDisconnecting] = useState(false);
 
   // Poll for updates on connected repos
   useEffect(() => {
@@ -86,12 +90,35 @@ export function ReposList({
       console.error("Failed to connect repo", e);
       alert("Failed to connect repository");
     } finally {
-        // We keep the connecting state until we see it in the connected list (handled by polling)
-        // or timeout. But for now, let's clear it after a short delay if it's not "connected" yet.
-        // Actually better: keep it true until the repo appears in connectedRepos.
-        setTimeout(() => {
-             setConnectingMap((prev) => ({ ...prev, [repo.id]: false }));
-        }, 2000);
+      // We keep the connecting state until we see it in the connected list (handled by polling)
+      // or timeout. But for now, let's clear it after a short delay if it's not "connected" yet.
+      // Actually better: keep it true until the repo appears in connectedRepos.
+      setTimeout(() => {
+           setConnectingMap((prev) => ({ ...prev, [repo.id]: false }));
+      }, 2000);
+    }
+  };
+
+  const handleDisconnectClick = (repo: ConnectedRepo) => {
+    setRepoToDisconnect({ id: repo.id, full_name: repo.full_name });
+    setDisconnectModalOpen(true);
+  };
+
+  const handleDisconnectConfirm = async () => {
+    if (!repoToDisconnect) return;
+    
+    setDisconnecting(true);
+    try {
+      await disconnectRepo(repoToDisconnect.id, token);
+      // Remove from local state immediately
+      setConnectedRepos((prev) => prev.filter((r) => r.id !== repoToDisconnect.id));
+      setDisconnectModalOpen(false);
+      setRepoToDisconnect(null);
+    } catch (e) {
+      console.error("Failed to disconnect repo", e);
+      alert("Failed to disconnect repository. Please try again.");
+    } finally {
+      setDisconnecting(false);
     }
   };
 
@@ -192,9 +219,6 @@ export function ReposList({
                           <TD className="text-right">
                             {status === "completed" || status === "connected" ? (
                               <div className="flex justify-end gap-2">
-                                <Button size="sm" variant="outline" disabled>
-                                    Connected
-                                </Button>
                                 <Button
                                   size="sm"
                                   onClick={() => {
@@ -207,6 +231,19 @@ export function ReposList({
                                   }}
                                 >
                                     View Docs
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    const connected = getConnectedRepo(repo.id);
+                                    if (connected) {
+                                      handleDisconnectClick(connected);
+                                    }
+                                  }}
+                                >
+                                  <X className="h-3 w-3 mr-1" />
+                                  Disconnect
                                 </Button>
                               </div>
                             ) : status ? (
@@ -234,6 +271,51 @@ export function ReposList({
           );
         })
       )}
+
+      <Modal
+        open={disconnectModalOpen}
+        onOpenChange={setDisconnectModalOpen}
+        title="Disconnect Repository"
+        disabled={disconnecting}
+      >
+        <div className="space-y-4">
+          {disconnecting ? (
+            <div className="flex flex-col items-center justify-center py-8">
+              <Loader className="h-8 w-8 animate-spin text-primary mb-4" />
+              <p className="text-sm font-medium">Disconnecting repository...</p>
+              <p className="text-xs text-mutedForeground mt-1">Please wait while we remove all data.</p>
+            </div>
+          ) : (
+            <>
+              <div className="text-sm text-mutedForeground">
+                <p className="mb-2">
+                  Are you sure you want to disconnect <span className="font-semibold text-foreground">{repoToDisconnect?.full_name}</span>?
+                </p>
+                <p className="text-destructive font-medium">
+                  ⚠️ Warning: This will permanently delete all documentation and chunks for this repository. This action cannot be undone.
+                </p>
+              </div>
+              <div className="flex justify-end gap-2">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setDisconnectModalOpen(false);
+                    setRepoToDisconnect(null);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button
+                  variant="destructive"
+                  onClick={handleDisconnectConfirm}
+                >
+                  Disconnect Repository
+                </Button>
+              </div>
+            </>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }
