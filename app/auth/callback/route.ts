@@ -7,14 +7,14 @@ export async function GET(request: NextRequest) {
   const origin = requestUrl.origin;
 
   if (!code) {
-    return NextResponse.redirect(`${origin}/login?error=missing_code`);
+    return NextResponse.redirect(`${origin}/?login=1&error=missing_code`);
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
   if (!supabaseUrl || !supabaseAnonKey) {
-    return NextResponse.redirect(`${origin}/login?error=config_error`);
+    return NextResponse.redirect(`${origin}/?login=1&error=config_error`);
   }
 
   const response = NextResponse.redirect(`${origin}/dashboard`);
@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
   if (error) {
     console.error("Auth callback error:", error.message);
     return NextResponse.redirect(
-      `${origin}/login?error=${encodeURIComponent(error.message)}`
+      `${origin}/?login=1&error=${encodeURIComponent(error.message)}`
     );
   }
 

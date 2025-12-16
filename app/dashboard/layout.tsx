@@ -12,7 +12,7 @@ export const metadata = {
 export default async function DashboardLayout({ children }: { children: ReactNode }) {
   const session = await getServerSession();
   if (!session?.user) {
-    redirect("/login");
+    redirect("/?login=1&next=%2Fdashboard");
   }
 
   const profile = session.user.user_metadata || {};
