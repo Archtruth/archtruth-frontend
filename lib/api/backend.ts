@@ -80,9 +80,12 @@ async function fetchWithRetry(
 
 export async function backendFetch<T>(
   path: string,
-  token: string,
+  token: string | undefined | null,
   init?: RequestInit
 ): Promise<T> {
+  if (!token) {
+    throw new Error("Not authenticated: missing Supabase access token");
+  }
   const resp = await fetchWithRetry(`${backendUrl}${path}`, {
     ...init,
     headers: {
