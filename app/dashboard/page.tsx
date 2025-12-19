@@ -5,15 +5,22 @@ import { getServerSession } from "@/lib/supabase/server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { DashboardSkeleton } from "@/components/ui/loading-skeleton";
+import { Input } from "@/components/ui/input";
+import { revalidatePath } from "next/cache";
 
-async function ensureOrg() {
+async function createOrg(formData: FormData) {
   "use server";
   const session = await getServerSession();
   const token = session?.access_token;
   if (!token) {
     throw new Error("Not authenticated");
   }
-  await backendFetch("/installations/bootstrap", token, { method: "POST" });
+  const name = (formData.get("name") as string | null)?.trim() || "My Org";
+  await backendFetch("/orgs", token, {
+    method: "POST",
+    body: JSON.stringify({ name }),
+  });
+  revalidatePath("/dashboard");
 }
 
 async function DashboardContent() {
@@ -48,10 +55,11 @@ async function DashboardContent() {
         <Card>
           <CardHeader>
             <CardTitle>No organization yet</CardTitle>
-            <CardDescription>Bootstrap an org to continue.</CardDescription>
+            <CardDescription>Create an organization to continue.</CardDescription>
           </CardHeader>
           <CardContent>
-            <form action={ensureOrg}>
+            <form action={createOrg} className="flex flex-col gap-3 max-w-md">
+              <Input name="name" placeholder="Organization name" required />
               <Button type="submit">Create organization</Button>
             </form>
           </CardContent>

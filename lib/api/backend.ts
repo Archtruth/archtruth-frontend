@@ -111,6 +111,7 @@ export async function listDocuments(repoId: number, token: string) {
     documents: {
       id: number;
       file_path: string;
+      commit_sha?: string;
       r2_url: string;
       updated_at?: string;
     }[];

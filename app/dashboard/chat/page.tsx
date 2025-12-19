@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import { getServerSession } from "@/lib/supabase/server";
+import { backendFetch } from "@/lib/api/backend";
 import { ChatClient } from "./chat-client";
 
 export default function ChatPage() {
@@ -16,6 +17,17 @@ async function ChatPageInner() {
   if (!token) {
     return <div>Please sign in to chat.</div>;
   }
-  return <ChatClient token={token} />;
+
+  const orgsResp = await backendFetch<{ organizations: { id: string; name: string }[] }>("/orgs", token);
+  const orgs = orgsResp.organizations || [];
+
+  const reposByOrg: Record<string, any[]> = {};
+  if (orgs.length > 0) {
+    const firstOrg = orgs[0].id;
+    const reposResp = await backendFetch<{ repositories: any[] }>(`/orgs/${firstOrg}/repositories`, token);
+    reposByOrg[firstOrg] = reposResp.repositories || [];
+  }
+
+  return <ChatClient token={token} initialOrgs={orgs} initialReposByOrg={reposByOrg} />;
 }
 

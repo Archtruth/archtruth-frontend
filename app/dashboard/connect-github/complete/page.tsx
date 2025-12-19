@@ -30,29 +30,40 @@ export default async function ConnectGithubComplete({ searchParams }: Props) {
     );
   }
 
+  if (!stateOrg) {
+    return (
+      <>
+        <h1>Missing organization context</h1>
+        <p>
+          We did not receive an <code>org_id</code> in the callback state. Please restart the GitHub App installation
+          from the Connect GitHub page and select an organization before installing.
+        </p>
+        <p className="mt-3">
+          <a href="/dashboard/connect-github" className="underline">
+            Go back to Connect GitHub
+          </a>
+        </p>
+      </>
+    );
+  }
+
   try {
     const token = session.access_token;
-    // If state (org_id) provided, skip bootstrap; otherwise ensure org.
-    if (!stateOrg) {
-      await backendFetch("/installations/bootstrap", token, { method: "POST" });
-    }
     await backendFetch("/installations/link", token, {
       method: "POST",
       body: JSON.stringify({
         installation_id: Number(installationId),
-        organization_id: stateOrg || undefined,
+        organization_id: stateOrg,
       }),
     });
 
     return (
       <>
         <h1>Installation linked</h1>
-        <p>
-          Installation {installationId} has been linked to {stateOrg ? `org ${stateOrg}` : "your organization"}.
-        </p>
+        <p>Installation {installationId} has been linked to org {stateOrg}.</p>
         <p>
           Continue to{" "}
-          <a href={`/dashboard/repos?org_id=${stateOrg || ""}`} className="underline">
+          <a href={`/dashboard/repos?org_id=${stateOrg}`} className="underline">
             repositories
           </a>{" "}
           to connect a repo.
