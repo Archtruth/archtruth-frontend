@@ -23,6 +23,8 @@ export function LoginForm({ variant = "page", error }: LoginFormProps) {
       provider: "github",
       options: {
         redirectTo: `${siteUrl}/auth/callback`,
+        // Needed to reliably list orgs the user belongs to (including private org membership)
+        scopes: "read:org",
       },
     });
     if (error) {

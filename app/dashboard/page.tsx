@@ -4,9 +4,18 @@ import { backendFetch } from "@/lib/api/backend";
 import { getServerSession } from "@/lib/supabase/server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { DashboardSkeleton } from "@/components/ui/loading-skeleton";
 import { Input } from "@/components/ui/input";
 import { revalidatePath } from "next/cache";
+
+type GithubOrgRow = {
+  github_login: string;
+  avatar_url?: string | null;
+  status: "connected" | "onboarded" | "not_connected";
+  archtruth_org_id?: string | null;
+  archtruth_org_name?: string | null;
+};
 
 async function createOrg(formData: FormData) {
   "use server";
@@ -23,6 +32,36 @@ async function createOrg(formData: FormData) {
   revalidatePath("/dashboard");
 }
 
+async function joinGithubOrg(formData: FormData) {
+  "use server";
+  const orgLogin = String(formData.get("org_login") || "").trim();
+  if (!orgLogin) {
+    throw new Error("org_login is required");
+  }
+
+  const session = await getServerSession();
+  const token = session?.access_token;
+  const providerToken = (session as any)?.provider_token as string | undefined;
+  if (!token || !providerToken) {
+    throw new Error("Not authenticated with GitHub. Please sign out and sign in again.");
+  }
+
+  const resp = await backendFetch<{ organization_id: string }>(
+    `/github/orgs/${encodeURIComponent(orgLogin)}/join`,
+    token,
+    {
+      method: "POST",
+      headers: { "X-GitHub-Token": providerToken },
+    }
+  );
+
+  revalidatePath("/dashboard");
+  revalidatePath("/dashboard/repos");
+
+  // Keep user in the dashboard; the org should now appear under Organizations.
+  return resp;
+}
+
 async function DashboardContent() {
   const session = await getServerSession();
   const token = session?.access_token;
@@ -33,6 +72,20 @@ async function DashboardContent() {
   const orgsResp = await backendFetch<{ organizations: { id: string; name: string }[] }>("/orgs", token);
   const orgs = orgsResp.organizations || [];
   const hasOrg = orgs.length > 0;
+
+  const providerToken = (session as any)?.provider_token as string | undefined;
+  let githubOrgs: GithubOrgRow[] = [];
+  let githubError: string | null = null;
+  if (providerToken) {
+    try {
+      const ghResp = await backendFetch<{ github_orgs: GithubOrgRow[] }>("/github/orgs", token, {
+        headers: { "X-GitHub-Token": providerToken },
+      });
+      githubOrgs = ghResp.github_orgs || [];
+    } catch (e: any) {
+      githubError = e?.message || "Failed to fetch GitHub organizations.";
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -50,6 +103,84 @@ async function DashboardContent() {
           </Link>
         </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>GitHub organizations</CardTitle>
+          <CardDescription>
+            We show all GitHub orgs you belong to, including those already onboarded by someone else.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {!providerToken ? (
+            <div className="rounded-md border border-border bg-muted p-3 text-sm text-mutedForeground">
+              Missing GitHub org access. Please sign out and sign in again (needs <code>read:org</code>).
+            </div>
+          ) : null}
+
+          {githubError ? (
+            <div className="rounded-md border border-border bg-muted p-3 text-sm text-mutedForeground">{githubError}</div>
+          ) : null}
+
+          {githubOrgs.length === 0 && providerToken && !githubError ? (
+            <p className="text-sm text-mutedForeground">No GitHub organizations found for this account.</p>
+          ) : null}
+
+          {githubOrgs.length > 0 ? (
+            <div className="space-y-2">
+              {githubOrgs.map((org) => {
+                const status = org.status;
+                const badgeVariant =
+                  status === "connected" ? "success" : status === "onboarded" ? "secondary" : "outline";
+                const badgeText = status === "connected" ? "Connected" : status === "onboarded" ? "Onboarded" : "Not connected";
+                return (
+                  <div
+                    key={org.github_login}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border p-3"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="truncate font-medium">{org.github_login}</div>
+                        <Badge variant={badgeVariant as any}>{badgeText}</Badge>
+                      </div>
+                      {org.archtruth_org_name ? (
+                        <div className="text-xs text-mutedForeground">
+                          ArchTruth workspace: <span className="font-medium">{org.archtruth_org_name}</span>
+                        </div>
+                      ) : (
+                        <div className="text-xs text-mutedForeground">Not connected yet.</div>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2">
+                      {status === "connected" && org.archtruth_org_id ? (
+                        <Link href={`/dashboard/repos?org_id=${encodeURIComponent(org.archtruth_org_id)}`}>
+                          <Button size="sm">Open</Button>
+                        </Link>
+                      ) : null}
+
+                      {status === "onboarded" ? (
+                        <form action={joinGithubOrg}>
+                          <input type="hidden" name="org_login" value={org.github_login} />
+                          <Button size="sm">Join</Button>
+                        </form>
+                      ) : null}
+
+                      {status === "not_connected" ? (
+                        <Link href="/dashboard/connect-github">
+                          <Button size="sm" variant="outline">
+                            Connect
+                          </Button>
+                        </Link>
+                      ) : null}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : null}
+        </CardContent>
+      </Card>
 
       {!hasOrg ? (
         <Card>
