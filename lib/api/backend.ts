@@ -10,6 +10,28 @@ interface FetchOptions extends RequestInit {
   timeout?: number;
 }
 
+export class BackendError extends Error {
+  status: number;
+  bodyText: string;
+  bodyJson?: any;
+
+  constructor(status: number, bodyText: string) {
+    super(`Backend error ${status}: ${bodyText}`);
+    this.name = "BackendError";
+    this.status = status;
+    this.bodyText = bodyText;
+    try {
+      this.bodyJson = JSON.parse(bodyText);
+    } catch {
+      // ignore
+    }
+  }
+}
+
+export function isBackendError(e: unknown): e is BackendError {
+  return e instanceof BackendError;
+}
+
 /**
  * Fetch with automatic retry logic for cold starts
  * Handles backend spinning up on Render free tier (can take 60-90 seconds)
@@ -101,7 +123,7 @@ export async function backendFetch<T>(
 
   if (!resp.ok) {
     const text = await resp.text();
-    throw new Error(`Backend error ${resp.status}: ${text}`);
+    throw new BackendError(resp.status, text);
   }
   return (await resp.json()) as T;
 }

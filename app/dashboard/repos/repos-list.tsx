@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { Modal } from "@/components/ui/modal";
-import { backendFetch, disconnectRepo } from "@/lib/api/backend";
+import { backendFetch, disconnectRepo, isBackendError } from "@/lib/api/backend";
 import { Loader } from "@/components/ui/loader";
 import { CheckCircle2, Circle, Clock, AlertCircle, RefreshCw, X } from "lucide-react";
 
@@ -51,9 +51,16 @@ export function ReposList({
   const router = useRouter();
   const [connectedRepos, setConnectedRepos] = useState<ConnectedRepo[]>(initialConnectedRepos);
   const [connectingMap, setConnectingMap] = useState<Record<number, boolean>>({});
+  const [connectErrorMap, setConnectErrorMap] = useState<Record<number, string>>({});
+  const [retryQueueMap, setRetryQueueMap] = useState<Record<number, boolean>>({}); // keyed by connected repo internal id
   const [disconnectModalOpen, setDisconnectModalOpen] = useState(false);
   const [repoToDisconnect, setRepoToDisconnect] = useState<{ id: number; full_name: string } | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
+
+  const fetchRepos = async () => {
+    const res = await backendFetch<{ repositories: ConnectedRepo[] }>(`/orgs/${orgId}/repositories`, token);
+    if (res.repositories) setConnectedRepos(res.repositories);
+  };
 
   const hasTransientRepoState = connectedRepos.some((r) => {
     const s = r.latest_job?.status;
@@ -61,6 +68,23 @@ export function ReposList({
   });
   const hasConnecting = Object.values(connectingMap).some(Boolean);
   const shouldPoll = hasTransientRepoState || hasConnecting;
+
+  // Clear connecting flags once the repo appears in connectedRepos (don't unlock after a fixed timeout).
+  useEffect(() => {
+    setConnectingMap((prev) => {
+      let changed = false;
+      const next = { ...prev };
+      for (const [githubRepoIdStr, val] of Object.entries(prev)) {
+        if (!val) continue;
+        const githubRepoId = Number(githubRepoIdStr);
+        if (connectedRepos.some((r) => r.github_repo_id === githubRepoId)) {
+          next[githubRepoId] = false;
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [connectedRepos]);
 
   // Poll for updates only when something is in a transient state
   useEffect(() => {
@@ -71,9 +95,7 @@ export function ReposList({
     async function pollOnce() {
       try {
         const res = await backendFetch<{ repositories: ConnectedRepo[] }>(`/orgs/${orgId}/repositories`, token);
-        if (!cancelled && res.repositories) {
-          setConnectedRepos(res.repositories);
-        }
+        if (!cancelled && res.repositories) setConnectedRepos(res.repositories);
       } catch (e) {
         console.error("Failed to poll repos", e);
       }
@@ -90,9 +112,15 @@ export function ReposList({
   }, [shouldPoll, orgId, token]);
 
   const handleConnect = async (installId: number, repo: Repo) => {
+    if (connectingMap[repo.id]) return;
     setConnectingMap((prev) => ({ ...prev, [repo.id]: true }));
+    setConnectErrorMap((prev) => {
+      const next = { ...prev };
+      delete next[repo.id];
+      return next;
+    });
     try {
-      await backendFetch("/installations/connect-repo", token, {
+      const res = await backendFetch<{ repo_id: number }>(`/installations/connect-repo`, token, {
         method: "POST",
         body: JSON.stringify({
           installation_id: installId,
@@ -100,17 +128,62 @@ export function ReposList({
           full_name: repo.full_name,
         }),
       });
-      // Trigger an immediate poll or wait for next interval
+
+      // Optimistic: show queued immediately (real status will come from polling/refetch).
+      const nowIso = new Date().toISOString();
+      setConnectedRepos((prev) => {
+        const already = prev.some((r) => r.github_repo_id === repo.id);
+        if (already) return prev;
+        return [
+          ...prev,
+          {
+            id: res.repo_id,
+            github_repo_id: repo.id,
+            full_name: repo.full_name,
+            latest_job: { status: "pending", job_type: "full_scan", created_at: nowIso },
+          },
+        ];
+      });
+
+      // Fetch immediately so status reflects without waiting for the 5s poll.
+      await fetchRepos();
     } catch (e) {
+      // If backend says "already queued", treat as success and just refresh.
+      if (isBackendError(e) && e.status === 409) {
+        await fetchRepos();
+        return;
+      }
       console.error("Failed to connect repo", e);
-      alert("Failed to connect repository");
+      setConnectErrorMap((prev) => ({
+        ...prev,
+        [repo.id]: e instanceof Error ? e.message : "Failed to connect & queue repository",
+      }));
+      // Hard failure: unlock so the user can retry.
+      setConnectingMap((prev) => ({ ...prev, [repo.id]: false }));
     } finally {
-      // We keep the connecting state until we see it in the connected list (handled by polling)
-      // or timeout. But for now, let's clear it after a short delay if it's not "connected" yet.
-      // Actually better: keep it true until the repo appears in connectedRepos.
-      setTimeout(() => {
-           setConnectingMap((prev) => ({ ...prev, [repo.id]: false }));
-      }, 2000);
+      // Success path: keep connectingMap=true until the repo appears in connectedRepos (effect clears it).
+    }
+  };
+
+  const handleRetryQueue = async (connectedRepoId: number) => {
+    if (retryQueueMap[connectedRepoId]) return;
+    setRetryQueueMap((prev) => ({ ...prev, [connectedRepoId]: true }));
+    try {
+      await backendFetch(`/orgs/${orgId}/repositories/${connectedRepoId}/queue`, token, {
+        method: "POST",
+        body: JSON.stringify({ job_type: "full_scan" }),
+      });
+      await fetchRepos();
+    } catch (e) {
+      // If backend says "already queued", treat as success and just refresh.
+      if (isBackendError(e) && e.status === 409) {
+        await fetchRepos();
+        return;
+      }
+      console.error("Failed to retry queue", e);
+      alert(e instanceof Error ? e.message : "Failed to queue scan. Please try again.");
+    } finally {
+      setRetryQueueMap((prev) => ({ ...prev, [connectedRepoId]: false }));
     }
   };
 
@@ -227,6 +300,10 @@ export function ReposList({
                                  <StatusBadge status={status} />
                              ) : isConnecting ? (
                                  <Badge variant="outline" className="gap-1"><Loader className="h-3 w-3" /> Connecting...</Badge>
+                             ) : connectErrorMap[repo.id] ? (
+                                 <Badge variant="outline" className="gap-1 bg-red-50 text-red-700 border-red-200">
+                                   <AlertCircle className="h-3 w-3" /> Not queued
+                                 </Badge>
                              ) : (
                                  <span className="text-mutedForeground text-sm">-</span>
                              )}
@@ -261,19 +338,50 @@ export function ReposList({
                                   Disconnect
                                 </Button>
                               </div>
+                            ) : status === "failed" ? (
+                              <div className="flex justify-end gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    const connected = getConnectedRepo(repo.id);
+                                    if (!connected) return;
+                                    handleRetryQueue(connected.id);
+                                  }}
+                                  loading={Boolean(getConnectedRepo(repo.id) && retryQueueMap[getConnectedRepo(repo.id)!.id])}
+                                  disabled={Boolean(getConnectedRepo(repo.id) && retryQueueMap[getConnectedRepo(repo.id)!.id])}
+                                >
+                                  Retry Scan
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => {
+                                    const connected = getConnectedRepo(repo.id);
+                                    if (connected) {
+                                      handleDisconnectClick(connected);
+                                    }
+                                  }}
+                                >
+                                  <X className="h-3 w-3 mr-1" />
+                                  Disconnect
+                                </Button>
+                              </div>
                             ) : status ? (
                                 <Button size="sm" variant="outline" disabled>
                                     Connected
                                 </Button>
                             ) : (
-                              <Button 
-                                size="sm" 
-                                onClick={() => handleConnect(install.installation_id, repo)}
-                                loading={isConnecting}
-                                disabled={isConnecting}
-                              >
-                                Connect & Queue
-                              </Button>
+                              <div className="flex justify-end gap-2">
+                                <Button 
+                                  size="sm" 
+                                  onClick={() => handleConnect(install.installation_id, repo)}
+                                  loading={isConnecting}
+                                  disabled={isConnecting}
+                                >
+                                  {connectErrorMap[repo.id] ? "Retry Connect & Queue" : "Connect & Queue"}
+                                </Button>
+                              </div>
                             )}
                           </TD>
                         </TR>
