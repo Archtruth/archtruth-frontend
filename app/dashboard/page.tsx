@@ -1,5 +1,6 @@
 import { Suspense } from "react";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { backendFetch } from "@/lib/api/backend";
 import { getServerSession } from "@/lib/supabase/server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -32,7 +33,7 @@ async function createOrg(formData: FormData) {
   revalidatePath("/dashboard");
 }
 
-async function joinGithubOrg(formData: FormData) {
+async function joinGithubOrg(formData: FormData): Promise<void> {
   "use server";
   const orgLogin = String(formData.get("org_login") || "").trim();
   if (!orgLogin) {
@@ -55,11 +56,9 @@ async function joinGithubOrg(formData: FormData) {
     }
   );
 
-  revalidatePath("/dashboard");
-  revalidatePath("/dashboard/repos");
-
-  // Keep user in the dashboard; the org should now appear under Organizations.
-  return resp;
+  // After joining, take the user straight to repos for that workspace.
+  // This also avoids needing client-side state refresh logic.
+  redirect(`/dashboard/repos?org_id=${encodeURIComponent(resp.organization_id)}`);
 }
 
 async function DashboardContent() {
