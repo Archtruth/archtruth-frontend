@@ -1,6 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
-import { backendFetch } from "@/lib/api/backend";
+import { redirect } from "next/navigation";
+import { backendFetch, isUnauthorizedBackendError } from "@/lib/api/backend";
 import { getServerSession } from "@/lib/supabase/server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -14,12 +15,20 @@ type Props = {
 async function ReposContent({ searchParams }: Props) {
   const session = await getServerSession();
   if (!session?.access_token) {
-    return null;
+    redirect("/?login=1&error=session_expired");
   }
   const token = session.access_token;
 
   const orgIdParam = Array.isArray(searchParams["org_id"]) ? searchParams["org_id"][0] : searchParams["org_id"];
-  const orgsResp = await backendFetch<{ organizations: { id: string; name: string }[] }>("/orgs", token);
+  let orgsResp: { organizations: { id: string; name: string }[] };
+  try {
+    orgsResp = await backendFetch<{ organizations: { id: string; name: string }[] }>("/orgs", token);
+  } catch (e) {
+    if (isUnauthorizedBackendError(e)) {
+      redirect("/?login=1&error=session_expired");
+    }
+    throw e;
+  }
   const orgs = orgsResp.organizations || [];
   const selectedOrgId = orgIdParam || orgs[0]?.id;
 
@@ -39,26 +48,42 @@ async function ReposContent({ searchParams }: Props) {
     );
   }
 
-  const installationsResp = await backendFetch<{ installations: { installation_id: number; account_login: string }[] }>(
-    `/orgs/${selectedOrgId}/installations`,
-    token
-  );
-  const installations = installationsResp.installations || [];
+  let installations: { installation_id: number; account_login: string }[] = [];
+  let connectedRepos: any[] = [];
+  try {
+    const installationsResp = await backendFetch<{ installations: { installation_id: number; account_login: string }[] }>(
+      `/orgs/${selectedOrgId}/installations`,
+      token
+    );
+    installations = installationsResp.installations || [];
 
-  const connectedResp = await backendFetch<{ repositories: any[] }>(
-    `/orgs/${selectedOrgId}/repositories`,
-    token
-  );
-  const connectedRepos = connectedResp.repositories || [];
+    const connectedResp = await backendFetch<{ repositories: any[] }>(
+      `/orgs/${selectedOrgId}/repositories`,
+      token
+    );
+    connectedRepos = connectedResp.repositories || [];
+  } catch (e) {
+    if (isUnauthorizedBackendError(e)) {
+      redirect("/?login=1&error=session_expired");
+    }
+    throw e;
+  }
 
   // Fetch repos per installation
   const reposByInstall: Record<number, any[]> = {};
   for (const install of installations) {
-    const list = await backendFetch<{ repositories: any[] }>(
-      `/installations/${install.installation_id}/repos`,
-      token
-    );
-    reposByInstall[install.installation_id] = list.repositories || [];
+    try {
+      const list = await backendFetch<{ repositories: any[] }>(
+        `/installations/${install.installation_id}/repos`,
+        token
+      );
+      reposByInstall[install.installation_id] = list.repositories || [];
+    } catch (e) {
+      if (isUnauthorizedBackendError(e)) {
+        redirect("/?login=1&error=session_expired");
+      }
+      throw e;
+    }
   }
 
   return (

@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { Modal } from "@/components/ui/modal";
-import { backendFetch, disconnectRepo, isBackendError } from "@/lib/api/backend";
+import { backendFetch, disconnectRepo, isBackendError } from "@/lib/api/backend-client";
 import { Loader } from "@/components/ui/loader";
 import { CheckCircle2, Circle, Clock, AlertCircle, RefreshCw, X } from "lucide-react";
 

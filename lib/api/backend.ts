@@ -16,7 +16,12 @@ export class BackendError extends Error {
   bodyJson?: any;
 
   constructor(status: number, bodyText: string) {
-    super(`Backend error ${status}: ${bodyText}`);
+    // Keep the backend payload for debugging, but provide a friendlier message for auth failures.
+    const msg =
+      status === 401
+        ? "Your session has expired. Please sign in again."
+        : `Backend error ${status}: ${bodyText}`;
+    super(msg);
     this.name = "BackendError";
     this.status = status;
     this.bodyText = bodyText;
@@ -30,6 +35,10 @@ export class BackendError extends Error {
 
 export function isBackendError(e: unknown): e is BackendError {
   return e instanceof BackendError;
+}
+
+export function isUnauthorizedBackendError(e: unknown): e is BackendError {
+  return isBackendError(e) && e.status === 401;
 }
 
 /**
@@ -159,7 +168,7 @@ export async function chatStream(
   body: { query: string; repo_ids?: number[]; history?: { role: string; content: string }[] },
   signal?: AbortSignal
 ): Promise<Response> {
-  return fetch(`${backendUrl}/chat`, {
+  const resp = await fetch(`${backendUrl}/chat`, {
     method: "POST",
     body: JSON.stringify(body),
     headers: {
@@ -168,5 +177,13 @@ export async function chatStream(
     },
     signal,
   });
+
+  // Ensure callers see a consistent error shape (including 401) instead of silently getting an empty stream.
+  if (!resp.ok) {
+    const text = await resp.text();
+    throw new BackendError(resp.status, text);
+  }
+
+  return resp;
 }
 

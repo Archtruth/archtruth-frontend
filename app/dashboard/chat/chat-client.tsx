@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import { Send, User, Bot, FileText, Loader2 } from "lucide-react";
-import { chatStream, backendFetch } from "@/lib/api/backend";
+import { chatStream, backendFetch } from "@/lib/api/backend-client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";

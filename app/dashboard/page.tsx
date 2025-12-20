@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { backendFetch } from "@/lib/api/backend";
+import { backendFetch, isUnauthorizedBackendError } from "@/lib/api/backend";
 import { getServerSession } from "@/lib/supabase/server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -23,13 +23,20 @@ async function createOrg(formData: FormData) {
   const session = await getServerSession();
   const token = session?.access_token;
   if (!token) {
-    throw new Error("Not authenticated");
+    redirect("/?login=1&error=session_expired");
   }
   const name = (formData.get("name") as string | null)?.trim() || "My Org";
-  await backendFetch("/orgs", token, {
-    method: "POST",
-    body: JSON.stringify({ name }),
-  });
+  try {
+    await backendFetch("/orgs", token, {
+      method: "POST",
+      body: JSON.stringify({ name }),
+    });
+  } catch (e) {
+    if (isUnauthorizedBackendError(e)) {
+      redirect("/?login=1&error=session_expired");
+    }
+    throw e;
+  }
   revalidatePath("/dashboard");
 }
 
@@ -44,17 +51,25 @@ async function joinGithubOrg(formData: FormData): Promise<void> {
   const token = session?.access_token;
   const providerToken = (session as any)?.provider_token as string | undefined;
   if (!token || !providerToken) {
-    throw new Error("Not authenticated with GitHub. Please sign out and sign in again.");
+    redirect("/?login=1&error=session_expired");
   }
 
-  const resp = await backendFetch<{ organization_id: string }>(
-    `/github/orgs/${encodeURIComponent(orgLogin)}/join`,
-    token,
-    {
-      method: "POST",
-      headers: { "X-GitHub-Token": providerToken },
+  let resp: { organization_id: string };
+  try {
+    resp = await backendFetch<{ organization_id: string }>(
+      `/github/orgs/${encodeURIComponent(orgLogin)}/join`,
+      token,
+      {
+        method: "POST",
+        headers: { "X-GitHub-Token": providerToken },
+      }
+    );
+  } catch (e) {
+    if (isUnauthorizedBackendError(e)) {
+      redirect("/?login=1&error=session_expired");
     }
-  );
+    throw e;
+  }
 
   // After joining, take the user straight to repos for that workspace.
   // This also avoids needing client-side state refresh logic.
@@ -65,10 +80,18 @@ async function DashboardContent() {
   const session = await getServerSession();
   const token = session?.access_token;
   if (!token) {
-    return null;
+    redirect("/?login=1&error=session_expired");
   }
 
-  const orgsResp = await backendFetch<{ organizations: { id: string; name: string }[] }>("/orgs", token);
+  let orgsResp: { organizations: { id: string; name: string }[] };
+  try {
+    orgsResp = await backendFetch<{ organizations: { id: string; name: string }[] }>("/orgs", token);
+  } catch (e) {
+    if (isUnauthorizedBackendError(e)) {
+      redirect("/?login=1&error=session_expired");
+    }
+    throw e;
+  }
   const orgs = orgsResp.organizations || [];
   const hasOrg = orgs.length > 0;
 

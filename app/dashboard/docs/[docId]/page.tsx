@@ -1,6 +1,6 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getServerSession } from "@/lib/supabase/server";
-import { presignDocument } from "@/lib/api/backend";
+import { isUnauthorizedBackendError, presignDocument } from "@/lib/api/backend";
 import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,7 @@ async function fetchMarkdown(url: string): Promise<string> {
 export default async function DocPage({ params }: PageProps) {
   const session = await getServerSession();
   if (!session?.access_token) {
-    return notFound();
+    redirect("/?login=1&error=session_expired");
   }
   const token = session.access_token;
   const docId = Number(params.docId);
@@ -30,7 +30,15 @@ export default async function DocPage({ params }: PageProps) {
     return notFound();
   }
 
-  const presigned = await presignDocument(docId, token);
+  let presigned: Awaited<ReturnType<typeof presignDocument>>;
+  try {
+    presigned = await presignDocument(docId, token);
+  } catch (e) {
+    if (isUnauthorizedBackendError(e)) {
+      redirect("/?login=1&error=session_expired");
+    }
+    throw e;
+  }
   const markdown = await fetchMarkdown(presigned.url);
 
   return (

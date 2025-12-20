@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { backendFetch } from "@/lib/api/backend";
+import { backendFetch, isUnauthorizedBackendError } from "@/lib/api/backend";
 import { getServerSession } from "@/lib/supabase/server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -32,19 +32,27 @@ async function joinGithubOrg(formData: FormData) {
   const token = session?.access_token;
   const providerToken = (session as any)?.provider_token as string | undefined;
   if (!token || !providerToken) {
-    throw new Error("Not authenticated with GitHub. Please sign out and sign in again.");
+    redirect("/?login=1&error=session_expired");
   }
 
-  const resp = await backendFetch<{ organization_id: string }>(
-    `/github/orgs/${encodeURIComponent(orgLogin)}/join`,
-    token,
-    {
-      method: "POST",
-      headers: {
-        "X-GitHub-Token": providerToken,
-      },
+  let resp: { organization_id: string };
+  try {
+    resp = await backendFetch<{ organization_id: string }>(
+      `/github/orgs/${encodeURIComponent(orgLogin)}/join`,
+      token,
+      {
+        method: "POST",
+        headers: {
+          "X-GitHub-Token": providerToken,
+        },
+      }
+    );
+  } catch (e) {
+    if (isUnauthorizedBackendError(e)) {
+      redirect("/?login=1&error=session_expired");
     }
-  );
+    throw e;
+  }
 
   redirect(`/dashboard/repos?org_id=${encodeURIComponent(resp.organization_id)}`);
 }
@@ -59,17 +67,25 @@ async function createWorkspaceAndInstall(formData: FormData) {
   const session = await getServerSession();
   const token = session?.access_token;
   if (!token) {
-    throw new Error("Not authenticated");
+    redirect("/?login=1&error=session_expired");
   }
 
-  const created = await backendFetch<{ organization_id: string; name?: string }>(
-    "/orgs",
-    token,
-    {
-      method: "POST",
-      body: JSON.stringify({ name: orgLogin }),
+  let created: { organization_id: string; name?: string };
+  try {
+    created = await backendFetch<{ organization_id: string; name?: string }>(
+      "/orgs",
+      token,
+      {
+        method: "POST",
+        body: JSON.stringify({ name: orgLogin }),
+      }
+    );
+  } catch (e) {
+    if (isUnauthorizedBackendError(e)) {
+      redirect("/?login=1&error=session_expired");
     }
-  );
+    throw e;
+  }
 
   if (!installUrl || installUrl === "#") {
     // Fall back to the standard page if install URL isn't configured.
@@ -83,7 +99,7 @@ async function ConnectGithubContent({ searchParams }: { searchParams: Record<str
   const session = await getServerSession();
   const token = session?.access_token;
   if (!token) {
-    return null;
+    redirect("/?login=1&error=session_expired");
   }
 
   const providerToken = (session as any)?.provider_token as string | undefined;
@@ -100,6 +116,9 @@ async function ConnectGithubContent({ searchParams }: { searchParams: Record<str
       });
       githubOrgs = ghResp.github_orgs || [];
     } catch (e: any) {
+      if (isUnauthorizedBackendError(e)) {
+        redirect("/?login=1&error=session_expired");
+      }
       githubError = e?.message || "Failed to fetch GitHub organizations.";
     }
   }

@@ -1,4 +1,5 @@
-import { backendFetch } from "@/lib/api/backend";
+import { redirect } from "next/navigation";
+import { backendFetch, isUnauthorizedBackendError } from "@/lib/api/backend";
 import { getServerSession } from "@/lib/supabase/server";
 
 type Props = {
@@ -22,12 +23,7 @@ export default async function ConnectGithubComplete({ searchParams }: Props) {
 
   const session = await getServerSession();
   if (!session?.access_token) {
-    return (
-      <>
-        <h1>Sign in required</h1>
-        <p>Please sign in to Supabase Auth and retry the GitHub App install redirect.</p>
-      </>
-    );
+    redirect("/?login=1&error=session_expired");
   }
 
   if (!stateOrg) {
@@ -71,6 +67,9 @@ export default async function ConnectGithubComplete({ searchParams }: Props) {
       </>
     );
   } catch (err: any) {
+    if (isUnauthorizedBackendError(err)) {
+      redirect("/?login=1&error=session_expired");
+    }
     return (
       <>
         <h1>Linking failed</h1>
