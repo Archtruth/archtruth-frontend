@@ -7,6 +7,8 @@ import {
   disconnectRepo as disconnectRepoBase,
   listDocuments as listDocumentsBase,
   presignDocument as presignDocumentBase,
+  listOrgDocuments as listOrgDocumentsBase,
+  presignOrgDocument as presignOrgDocumentBase,
   isBackendError,
   type BackendError,
 } from "@/lib/api/backend";
@@ -61,6 +63,14 @@ export function listDocuments(repoId: number, token: string) {
 
 export function presignDocument(docId: number, token: string) {
   return withAuthRedirect(() => presignDocumentBase(docId, token));
+}
+
+export function listOrgDocuments(orgId: string, token: string) {
+  return withAuthRedirect(() => listOrgDocumentsBase(orgId, token));
+}
+
+export function presignOrgDocument(orgId: string, fileName: string, token: string) {
+  return withAuthRedirect(() => presignOrgDocumentBase(orgId, fileName, token));
 }
 
 export function disconnectRepo(repoId: number, token: string) {

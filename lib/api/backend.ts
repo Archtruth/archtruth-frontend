@@ -153,6 +153,21 @@ export async function presignDocument(docId: number, token: string) {
   return backendFetch<{ url: string }>(`/documents/${docId}/presigned`, token);
 }
 
+export async function listOrgDocuments(orgId: string, token: string) {
+  return backendFetch<{
+    documents: {
+      id: number;
+      file_path: string;
+      r2_url: string;
+      updated_at?: string;
+    }[];
+  }>(`/org-docs/${orgId}`, token);
+}
+
+export async function presignOrgDocument(orgId: string, fileName: string, token: string) {
+  return backendFetch<{ url: string }>(`/org-docs/${orgId}/${fileName}/presigned`, token);
+}
+
 export async function disconnectRepo(repoId: number, token: string) {
   return backendFetch<{ message: string; repo_id: number }>(
     `/installations/disconnect-repo/${repoId}`,

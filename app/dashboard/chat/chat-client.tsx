@@ -11,7 +11,18 @@ import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-type Citation = { doc_id?: number; repo_id?: number; file_path?: string; commit_sha?: string; score?: number; similarity?: number };
+type Citation = {
+  doc_id?: number;
+  repo_id?: number;
+  file_path?: string;
+  commit_sha?: string;
+  score?: number;
+  similarity?: number;
+  heading?: string;
+  chunk_index?: number;
+  start_offset?: number;
+  end_offset?: number;
+};
 
 type Message = {
   role: "user" | "assistant";
@@ -40,6 +51,7 @@ export function ChatClient({
   const [selectedOrgId, setSelectedOrgId] = useState<string | undefined>(initialOrgs?.[0]?.id);
   const [reposByOrg, setReposByOrg] = useState<Record<string, Repo[]>>(initialReposByOrg);
   const [selectedRepoIds, setSelectedRepoIds] = useState<number[]>([]);
+  const [allReposSelected, setAllReposSelected] = useState<boolean>(true);
   const [loadingRepos, setLoadingRepos] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
@@ -57,6 +69,7 @@ export function ChatClient({
       try {
         const resp = await backendFetch<{ repositories: Repo[] }>(`/orgs/${orgId}/repositories`, token);
         setReposByOrg((prev) => ({ ...prev, [orgId]: resp.repositories || [] }));
+        setSelectedRepoIds((resp.repositories || []).map((r) => r.id));
       } catch (e) {
         console.error("Failed to load repositories", e);
       } finally {
@@ -67,6 +80,14 @@ export function ChatClient({
       loadRepos(selectedOrgId);
     }
   }, [selectedOrgId, reposByOrg, token]);
+
+  useEffect(() => {
+    if (selectedOrgId && reposByOrg[selectedOrgId]) {
+      const ids = reposByOrg[selectedOrgId].map((r) => r.id);
+      setSelectedRepoIds(ids);
+      setAllReposSelected(true);
+    }
+  }, [selectedOrgId, reposByOrg]);
 
   const send = async () => {
     if (!token || !query.trim()) return;
@@ -181,26 +202,49 @@ export function ChatClient({
         </div>
 
         <div className="flex flex-col gap-2">
-          <label className="text-sm font-medium">Repositories (select at least one)</label>
-          <Select
-            value={selectedRepoIds[0]?.toString() || ""}
-            onValueChange={(val) => {
-              const id = Number(val);
-              setSelectedRepoIds(id ? [id] : []);
-            }}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder={loadingRepos ? "Loading repos..." : "Select repository"} />
-            </SelectTrigger>
-            <SelectContent>
-              {(selectedOrgId ? reposByOrg[selectedOrgId] || [] : []).map((repo) => (
-                <SelectItem key={repo.id} value={repo.id.toString()}>
-                  {repo.full_name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          {!selectedOrgId && <p className="text-xs text-mutedForeground">Pick an org first.</p>}
+          <label className="text-sm font-medium">Repositories (defaults to all)</label>
+          <div className="rounded-md border border-border/60 p-3 bg-muted/40 space-y-2">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={allReposSelected}
+                onChange={(e) => {
+                  const checked = e.target.checked;
+                  setAllReposSelected(checked);
+                  if (checked && selectedOrgId && reposByOrg[selectedOrgId]) {
+                    setSelectedRepoIds(reposByOrg[selectedOrgId].map((r) => r.id));
+                  } else if (!checked) {
+                    setSelectedRepoIds([]);
+                  }
+                }}
+              />
+              <span className="text-sm">All repositories in org</span>
+            </div>
+            <div className="space-y-1 max-h-48 overflow-y-auto">
+              {(selectedOrgId ? reposByOrg[selectedOrgId] || [] : []).map((repo) => {
+                const checked = selectedRepoIds.includes(repo.id);
+                return (
+                  <label key={repo.id} className="flex items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => {
+                        const val = e.target.checked;
+                        setAllReposSelected(false);
+                        setSelectedRepoIds((prev) =>
+                          val ? Array.from(new Set([...prev, repo.id])) : prev.filter((id) => id !== repo.id)
+                        );
+                      }}
+                    />
+                    <span className="truncate">{repo.full_name}</span>
+                  </label>
+                );
+              })}
+              {selectedOrgId && (reposByOrg[selectedOrgId] || []).length === 0 && (
+                <p className="text-xs text-mutedForeground">{loadingRepos ? "Loading repos..." : "No repos yet."}</p>
+              )}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -261,10 +305,16 @@ export function ChatClient({
                                         {c.commit_sha ? (
                                           <span className="opacity-60 font-mono">[{c.commit_sha.slice(0,7)}]</span>
                                         ) : null}{" "}
+                                        {c.start_offset !== undefined && c.end_offset !== undefined ? (
+                                          <span className="opacity-60 font-mono">[{c.start_offset}-{c.end_offset}]</span>
+                                        ) : null}{" "}
                                         {c.score !== undefined || c.similarity !== undefined ? (
                                           <span className="opacity-50">
                                             ({(c.score ?? c.similarity ?? 0).toFixed(2)})
                                           </span>
+                                        ) : null}
+                                        {c.heading ? (
+                                          <span className="opacity-60"> · {c.heading}</span>
                                         ) : null}
                                     </li>
                                 ))}
