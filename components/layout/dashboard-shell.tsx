@@ -134,10 +134,10 @@ export function DashboardShell({
               <span className="text-sm font-semibold">{userName || "User"}</span>
               <span className="text-xs text-slate-500">{orgId ? "Org scoped" : "No org selected"}</span>
             </div>
-            <Avatar>
-              <AvatarImage src={userAvatar || ""} alt={userName || "User"} />
+             <Avatar>
+                <AvatarImage src={userAvatar || ""} alt={userName || "User"} />
               <AvatarFallback>{userName ? userName[0]?.toUpperCase() : <User className="h-4 w-4" />}</AvatarFallback>
-            </Avatar>
+             </Avatar>
             {onLogout ? (
               <form action={onLogout}>
                 <Button variant="ghost" size="sm" type="submit" className="gap-2">
@@ -167,28 +167,28 @@ export function DashboardShell({
                 </div>
               </Link>
             ))}
-            {onDeleteAccount && (
+          {onDeleteAccount && (
               <div className="mt-4 border-t border-slate-200 pt-3">
-                <form action={onDeleteAccount}>
-                  <button
-                    type="submit"
-                    className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 hover:text-red-700"
-                    onClick={(e) => {
+              <form action={onDeleteAccount}>
+                <button
+                  type="submit"
+                  className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 hover:text-red-700"
+                  onClick={(e) => {
                       if (
                         !confirm(
                           "Are you sure you want to delete your account? This action cannot be undone and will delete all your data."
                         )
                       ) {
-                        e.preventDefault();
-                      }
-                    }}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                    Delete Account
-                  </button>
-                </form>
-              </div>
-            )}
+                      e.preventDefault();
+                    }
+                  }}
+                >
+                  <Trash2 className="h-4 w-4" />
+                  Delete Account
+                </button>
+              </form>
+            </div>
+          )}
           </nav>
 
           <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-600 shadow-sm">
@@ -204,7 +204,7 @@ export function DashboardShell({
 
         <main className="flex-1 space-y-4">
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            {children}
+          {children}
           </div>
         </main>
       </div>
