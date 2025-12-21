@@ -9,6 +9,8 @@ import {
   presignDocument as presignDocumentBase,
   listOrgDocuments as listOrgDocumentsBase,
   presignOrgDocument as presignOrgDocumentBase,
+  listWikiPages as listWikiPagesBase,
+  presignWikiPage as presignWikiPageBase,
   isBackendError,
   type BackendError,
 } from "@/lib/api/backend";
@@ -71,6 +73,14 @@ export function listOrgDocuments(orgId: string, token: string) {
 
 export function presignOrgDocument(orgId: string, fileName: string, token: string) {
   return withAuthRedirect(() => presignOrgDocumentBase(orgId, fileName, token));
+}
+
+export function listWikiPages(repoId: number, token: string) {
+  return withAuthRedirect(() => listWikiPagesBase(repoId, token));
+}
+
+export function presignWikiPage(repoId: number, slug: string, token: string) {
+  return withAuthRedirect(() => presignWikiPageBase(repoId, slug, token));
 }
 
 export function disconnectRepo(repoId: number, token: string) {

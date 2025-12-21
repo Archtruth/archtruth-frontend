@@ -168,6 +168,23 @@ export async function presignOrgDocument(orgId: string, fileName: string, token:
   return backendFetch<{ url: string }>(`/org-docs/${orgId}/${fileName}/presigned`, token);
 }
 
+export async function listWikiPages(repoId: number, token: string) {
+  return backendFetch<{
+    pages: {
+      id: number;
+      repo_id: number;
+      slug: string;
+      title: string;
+      category?: string;
+      updated_at?: string;
+    }[];
+  }>(`/wiki/by-repo/${repoId}`, token);
+}
+
+export async function presignWikiPage(repoId: number, slug: string, token: string) {
+  return backendFetch<{ url: string }>(`/wiki/by-repo/${repoId}/${encodeURIComponent(slug)}/presigned`, token);
+}
+
 export async function disconnectRepo(repoId: number, token: string) {
   return backendFetch<{ message: string; repo_id: number }>(
     `/installations/disconnect-repo/${repoId}`,
