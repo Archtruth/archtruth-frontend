@@ -16,6 +16,7 @@ type Citation = {
   repo_id?: number;
   file_path?: string;
   commit_sha?: string;
+  url?: string | null;
   score?: number;
   similarity?: number;
   heading?: string;
@@ -301,7 +302,18 @@ export function ChatClient({
                             <ul className="space-y-1">
                                 {m.citations.map((c, i) => (
                                     <li key={i} className="truncate" title={c.file_path}>
-                                        {c.file_path}{" "}
+                                        {c.url ? (
+                                          <a
+                                            href={c.url}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="underline underline-offset-2 hover:text-foreground"
+                                          >
+                                            {c.file_path}
+                                          </a>
+                                        ) : (
+                                          <span>{c.file_path}</span>
+                                        )}{" "}
                                         {c.commit_sha ? (
                                           <span className="opacity-60 font-mono">[{c.commit_sha.slice(0,7)}]</span>
                                         ) : null}{" "}
