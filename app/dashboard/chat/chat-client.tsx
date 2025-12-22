@@ -30,6 +30,7 @@ type Message = {
   content: string;
   citations?: Citation[];
   id: string;
+  statusMessages?: string[];
 };
 
 type Org = { id: string; name: string };
@@ -149,6 +150,18 @@ export function ChatClient({
               currentText += obj.text;
                setMessages((prev) => 
                 prev.map(m => m.id === botMsgId ? { ...m, content: currentText } : m)
+              );
+            } else if (obj.event === "status") {
+              const message = obj.message || obj.phase || "Working...";
+              setMessages((prev) =>
+                prev.map(m => m.id === botMsgId
+                  ? { ...m, statusMessages: [...(m.statusMessages || []), String(message)] }
+                  : m)
+              );
+            } else if (obj.event === "error") {
+              const message = obj.message || "The assistant hit an error.";
+              setMessages((prev) =>
+                prev.map(m => m.id === botMsgId ? { ...m, content: message } : m)
               );
             }
           } catch {
@@ -332,6 +345,16 @@ export function ChatClient({
                                 ))}
                             </ul>
                         </div>
+                    )}
+                    {m.statusMessages && m.statusMessages.length > 0 && (
+                      <div className="mt-2 text-xs text-mutedForeground bg-muted/40 p-2 rounded border border-dashed w-full">
+                        <div className="font-semibold mb-1">Activity</div>
+                        <ul className="space-y-1">
+                          {m.statusMessages.map((s, i) => (
+                            <li key={i} className="truncate">{s}</li>
+                          ))}
+                        </ul>
+                      </div>
                     )}
                 </div>
               </div>
