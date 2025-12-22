@@ -14,6 +14,7 @@ type WikiPage = {
   slug: string;
   title: string;
   category?: string;
+  nav_order?: number;
   updated_at?: string;
 };
 
@@ -68,6 +69,16 @@ export function RepoWikiPageClient({
     acc[cat].push(page);
     return acc;
   }, {} as Record<string, WikiPage[]>);
+
+  // Sort pages within each category by nav_order then title
+  Object.keys(groupedPages).forEach((cat) => {
+    groupedPages[cat] = groupedPages[cat].slice().sort((a, b) => {
+      const ao = a.nav_order ?? 0;
+      const bo = b.nav_order ?? 0;
+      if (ao !== bo) return ao - bo;
+      return a.title.localeCompare(b.title);
+    });
+  });
 
   // Custom sort order for standard categories
   const categoryOrder = ["overview", "architecture", "guides", "modules", "api", "generated", "general"];
