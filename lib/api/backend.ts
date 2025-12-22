@@ -195,6 +195,28 @@ export async function disconnectRepo(repoId: number, token: string) {
   );
 }
 
+export async function listIngestionTasks(repoId: number, token: string) {
+  return backendFetch<{
+    tasks: {
+      id: number;
+      repo_id: number;
+      stage: string;
+      status: string;
+      started_at: string;
+      completed_at?: string;
+      error_message?: string;
+    }[];
+  }>(`/ingestion/tasks/${repoId}`, token);
+}
+
+export async function cancelIngestionJob(jobId: number, token: string) {
+  return backendFetch<{ success: boolean; status: string }>(
+    `/ingestion/cancel/${jobId}`,
+    token,
+    { method: "POST" }
+  );
+}
+
 export async function chatStream(
   token: string,
   body: { query: string; repo_ids?: number[]; history?: { role: string; content: string }[] },

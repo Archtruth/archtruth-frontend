@@ -7,9 +7,25 @@ import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TBody, TD, TH, THead, TR } from "@/components/ui/table";
 import { Modal } from "@/components/ui/modal";
-import { backendFetch, disconnectRepo, isBackendError } from "@/lib/api/backend-client";
+import {
+  backendFetch,
+  disconnectRepo,
+  isBackendError,
+  listIngestionTasks,
+  cancelIngestionJob,
+} from "@/lib/api/backend-client";
 import { Loader } from "@/components/ui/loader";
-import { CheckCircle2, Circle, Clock, AlertCircle, RefreshCw, X } from "lucide-react";
+import {
+  CheckCircle2,
+  Circle,
+  Clock,
+  AlertCircle,
+  RefreshCw,
+  X,
+  ListChecks,
+  StopCircle,
+} from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 
 type Repo = {
   id: number;
@@ -22,11 +38,103 @@ type ConnectedRepo = {
   github_repo_id: number;
   full_name: string;
   latest_job?: {
-    status: "pending" | "processing" | "completed" | "failed";
+    id?: number; // Backend exposes this now
+    status: "pending" | "processing" | "completed" | "failed" | "cancelled";
     job_type: string;
     created_at: string;
   };
 };
+
+type IngestionTask = {
+  id: number;
+  stage: string;
+  status: string;
+  started_at: string;
+};
+
+function IngestionStatusPopover({ repoId, token, jobId }: { repoId: number; token: string; jobId?: number }) {
+  const [tasks, setTasks] = useState<IngestionTask[]>([]);
+  const [open, setOpen] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    listIngestionTasks(repoId, token).then((res) => {
+      setTasks(res.tasks || []);
+    });
+    const interval = setInterval(() => {
+      listIngestionTasks(repoId, token).then((res) => {
+        setTasks(res.tasks || []);
+      });
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [open, repoId, token]);
+
+  const handleCancel = async () => {
+    if (!jobId) return;
+    if (!confirm("Are you sure you want to cancel this job?")) return;
+    setCancelling(true);
+    try {
+      await cancelIngestionJob(jobId, token);
+    } catch (e) {
+      console.error("Failed to cancel job", e);
+      alert("Failed to cancel job.");
+    } finally {
+      setCancelling(false);
+    }
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
+          <ListChecks className="h-4 w-4 text-muted-foreground hover:text-primary" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="w-80 p-0" align="end">
+        <div className="p-3 border-b bg-muted/10 flex justify-between items-center">
+          <h4 className="font-medium text-sm">Ingestion Progress</h4>
+          {jobId && (
+            <Button
+              variant="destructive"
+              size="sm"
+              className="h-6 text-xs px-2"
+              onClick={handleCancel}
+              disabled={cancelling}
+            >
+              <StopCircle className="h-3 w-3 mr-1" />
+              Cancel
+            </Button>
+          )}
+        </div>
+        <div className="max-h-60 overflow-y-auto p-2 space-y-1">
+          {tasks.length === 0 ? (
+            <p className="text-xs text-muted-foreground p-2">Waiting for tasks to start...</p>
+          ) : (
+            tasks.map((t) => (
+              <div key={t.id} className="flex items-center justify-between text-xs p-2 rounded hover:bg-muted/50">
+                <span className="capitalize font-medium text-foreground/80">
+                  {t.stage.replace(/_/g, " ")}
+                </span>
+                <span
+                  className={
+                    t.status === "completed"
+                      ? "text-green-600"
+                      : t.status === "failed"
+                      ? "text-red-600"
+                      : "text-blue-600 animate-pulse"
+                  }
+                >
+                  {t.status}
+                </span>
+              </div>
+            ))
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 type Installation = {
   installation_id: number;
@@ -297,7 +405,12 @@ export function ReposList({
                           <TD className="text-mutedForeground font-mono text-xs">{repo.default_branch || "main"}</TD>
                           <TD>
                              {status ? (
-                                 <StatusBadge status={status} />
+                                 <div className="flex items-center gap-2">
+                                   <StatusBadge status={status} />
+                                   {(status === "processing" || status === "pending") && (
+                                     <IngestionStatusPopover repoId={repo.id} token={token} jobId={getConnectedRepo(repo.id)?.latest_job?.id} />
+                                   )}
+                                 </div>
                              ) : isConnecting ? (
                                  <Badge variant="outline" className="gap-1"><Loader className="h-3 w-3" /> Connecting...</Badge>
                              ) : connectErrorMap[repo.id] ? (
