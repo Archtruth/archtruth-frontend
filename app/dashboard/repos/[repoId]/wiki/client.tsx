@@ -3,11 +3,11 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { presignWikiPage } from "@/lib/api/backend-client";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FileText, ChevronLeft, Calendar, Loader, BookOpen } from "lucide-react";
+import { FileText, ChevronLeft, Calendar, Loader, BookOpen, Menu } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import { cn } from "@/lib/utils";
 
 type WikiPage = {
   id: number;
@@ -37,9 +37,10 @@ export function RepoWikiPageClient({
   backHref: string;
   pages: WikiPage[];
 }) {
-  const [selectedSlug, setSelectedSlug] = useState<string>("");
+  const [selectedSlug, setSelectedSlug] = useState<string>(pages.length > 0 ? pages[0].slug : "");
   const [markdown, setMarkdown] = useState<string>("");
   const [loading, setLoading] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     if (!selectedSlug) return;
@@ -60,111 +61,134 @@ export function RepoWikiPageClient({
 
   const selected = pages.find((p) => p.slug === selectedSlug);
 
+  // Group pages by category
+  const groupedPages = pages.reduce((acc, page) => {
+    const cat = page.category || "General";
+    if (!acc[cat]) acc[cat] = [];
+    acc[cat].push(page);
+    return acc;
+  }, {} as Record<string, WikiPage[]>);
+
+  // Custom sort order for standard categories
+  const categoryOrder = ["overview", "architecture", "guides", "modules", "api", "generated", "general"];
+  const sortedCategories = Object.keys(groupedPages).sort((a, b) => {
+    const ia = categoryOrder.indexOf(a.toLowerCase());
+    const ib = categoryOrder.indexOf(b.toLowerCase());
+    if (ia !== -1 && ib !== -1) return ia - ib;
+    if (ia !== -1) return -1;
+    if (ib !== -1) return 1;
+    return a.localeCompare(b);
+  });
+
   return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+    <div className="flex flex-col h-[calc(100vh-100px)]">
+      {/* Header */}
+      <div className="flex items-center justify-between px-6 py-4 border-b bg-background">
         <div className="flex items-center gap-2">
           <Link href={backHref}>
             <Button variant="ghost" size="icon">
               <ChevronLeft className="h-4 w-4" />
             </Button>
           </Link>
-          <div>
-            <h1 className="text-2xl font-semibold flex items-center gap-2">
-              <BookOpen className="h-5 w-5" />
-              Repository Wiki
-            </h1>
-            <p className="text-mutedForeground">Browse wiki-style artifacts generated from the repo.</p>
-          </div>
+          <h1 className="text-xl font-semibold flex items-center gap-2">
+            <BookOpen className="h-5 w-5 text-primary" />
+            Repository Wiki
+          </h1>
         </div>
-        <Link href={backHref}>
-          <Button variant="outline">Back to repos</Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+            <Menu className="h-5 w-5" />
+          </Button>
+          <Link href={backHref}>
+            <Button variant="outline" size="sm">Back to Repos</Button>
+          </Link>
+        </div>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <FileText className="h-5 w-5" />
-            Wiki Pages
-          </CardTitle>
-          <CardDescription>Structured docs that update when code changes are ingested.</CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
+      <div className="flex flex-1 overflow-hidden">
+        {/* Sidebar */}
+        <aside
+          className={cn(
+            "w-64 border-r bg-muted/10 overflow-y-auto transition-transform duration-200 ease-in-out absolute md:relative z-20 h-full md:translate-x-0 bg-background md:bg-transparent",
+            mobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+          )}
+        >
+          <div className="p-4 space-y-6">
+            {pages.length === 0 ? (
+              <p className="text-sm text-muted-foreground p-2">No pages found.</p>
+            ) : (
+              sortedCategories.map((category) => (
+                <div key={category}>
+                  <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-2">
+                    {category}
+                  </h3>
+                  <div className="space-y-1">
+                    {groupedPages[category].map((page) => (
+                      <button
+                        key={page.slug}
+                        onClick={() => {
+                          setSelectedSlug(page.slug);
+                          setMobileMenuOpen(false);
+                        }}
+                        className={cn(
+                          "w-full text-left px-2 py-1.5 text-sm rounded-md transition-colors",
+                          selectedSlug === page.slug
+                            ? "bg-primary/10 text-primary font-medium"
+                            : "hover:bg-muted text-foreground/80 hover:text-foreground"
+                        )}
+                      >
+                        {page.title}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </aside>
+
+        {/* Main Content */}
+        <main className="flex-1 overflow-y-auto bg-background p-8">
           {pages.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-12 text-center">
+            <div className="flex flex-col items-center justify-center h-full text-center">
               <div className="bg-muted p-4 rounded-full mb-4">
-                <BookOpen className="h-8 w-8 text-mutedForeground" />
+                <BookOpen className="h-8 w-8 text-muted-foreground" />
               </div>
-              <h3 className="text-lg font-medium">No wiki pages found</h3>
-              <p className="text-mutedForeground max-w-sm mt-2">
-                Run a repository sync to generate wiki artifacts.
+              <h3 className="text-lg font-medium">Wiki is empty</h3>
+              <p className="text-muted-foreground max-w-sm mt-2">
+                Sync the repository to generate documentation.
               </p>
-              <Link href={backHref} className="mt-4">
-                <Button>Go to Repositories</Button>
-              </Link>
+            </div>
+          ) : !selectedSlug ? (
+            <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+              <FileText className="h-12 w-12 mb-4 opacity-20" />
+              <p>Select a page from the sidebar to view content.</p>
             </div>
           ) : (
-            <>
-              <div className="space-y-2">
-                <label className="text-sm font-medium">Select Page</label>
-                <Select value={selectedSlug} onValueChange={setSelectedSlug}>
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Choose a wiki page to view..." />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {pages.map((p) => (
-                      <SelectItem key={p.slug} value={p.slug}>
-                        <div className="flex items-center gap-2">
-                          <FileText className="h-4 w-4 text-primary" />
-                          <span className="font-mono text-sm">{p.slug}</span>
-                          <span className="text-sm text-muted-foreground">{p.title}</span>
-                          {p.updated_at && (
-                            <span className="text-xs text-muted-foreground ml-auto">
-                              {new Date(p.updated_at).toLocaleDateString()}
-                            </span>
-                          )}
-                        </div>
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+            <div className="max-w-4xl mx-auto">
+              <div className="mb-8 border-b pb-4">
+                <h1 className="text-3xl font-bold mb-2">{selected?.title}</h1>
+                {selected?.updated_at && (
+                  <div className="flex items-center text-sm text-muted-foreground">
+                    <Calendar className="h-4 w-4 mr-1" />
+                    Last updated: {new Date(selected.updated_at).toLocaleDateString()}
+                  </div>
+                )}
               </div>
 
-              {selectedSlug && (
-                <Card>
-                  <CardHeader className="bg-muted/30 border-b">
-                    <CardTitle className="font-mono text-sm flex items-center gap-2">
-                      <FileText className="h-4 w-4" />
-                      {selected?.title || selectedSlug}
-                      {selected?.updated_at && (
-                        <span className="text-xs text-muted-foreground ml-auto flex items-center gap-1">
-                          <Calendar className="h-3 w-3" />
-                          {new Date(selected.updated_at).toLocaleDateString()}
-                        </span>
-                      )}
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="p-8">
-                    {loading ? (
-                      <div className="flex items-center justify-center py-12">
-                        <Loader className="h-6 w-6 animate-spin mr-2" />
-                        Loading wiki page...
-                      </div>
-                    ) : (
-                      <article className="prose dark:prose-invert max-w-none">
-                        <ReactMarkdown>{markdown}</ReactMarkdown>
-                      </article>
-                    )}
-                  </CardContent>
-                </Card>
+              {loading ? (
+                <div className="flex items-center justify-center py-12">
+                  <Loader className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              ) : (
+                <article className="prose dark:prose-invert max-w-none">
+                  <ReactMarkdown>{markdown}</ReactMarkdown>
+                </article>
               )}
-            </>
+            </div>
           )}
-        </CardContent>
-      </Card>
+        </main>
+      </div>
     </div>
   );
 }
-
-
