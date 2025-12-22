@@ -31,6 +31,8 @@ type Message = {
   citations?: Citation[];
   id: string;
   statusMessages?: string[];
+  currentStatus?: string;
+  showStatusDetails?: boolean;
 };
 
 type Org = { id: string; name: string };
@@ -155,7 +157,14 @@ export function ChatClient({
               const message = obj.message || obj.phase || "Working...";
               setMessages((prev) =>
                 prev.map(m => m.id === botMsgId
-                  ? { ...m, statusMessages: [...(m.statusMessages || []), String(message)] }
+                  ? (() => {
+                      const prevLog = m.statusMessages || [];
+                      const msg = String(message);
+                      // De-dupe consecutive duplicates and cap log size for a cleaner UI.
+                      const last = prevLog.length > 0 ? prevLog[prevLog.length - 1] : null;
+                      const nextLog = last === msg ? prevLog : [...prevLog, msg].slice(-20);
+                      return { ...m, currentStatus: msg, statusMessages: nextLog };
+                    })()
                   : m)
               );
             } else if (obj.event === "error") {
@@ -346,16 +355,36 @@ export function ChatClient({
                             </ul>
                         </div>
                     )}
-                    {m.statusMessages && m.statusMessages.length > 0 && (
+                    {m.currentStatus ? (
                       <div className="mt-2 text-xs text-mutedForeground bg-muted/40 p-2 rounded border border-dashed w-full">
-                        <div className="font-semibold mb-1">Activity</div>
-                        <ul className="space-y-1">
-                          {m.statusMessages.map((s, i) => (
-                            <li key={i} className="truncate">{s}</li>
-                          ))}
-                        </ul>
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="truncate">
+                            <span className="font-semibold">Working:</span>{" "}
+                            <span className="opacity-90">{m.currentStatus}</span>
+                          </div>
+                          {m.statusMessages && m.statusMessages.length > 1 ? (
+                            <button
+                              type="button"
+                              className="text-xs underline underline-offset-2 opacity-80 hover:opacity-100"
+                              onClick={() => {
+                                setMessages((prev) =>
+                                  prev.map(x => x.id === m.id ? { ...x, showStatusDetails: !x.showStatusDetails } : x)
+                                );
+                              }}
+                            >
+                              {m.showStatusDetails ? "Hide" : "Details"}
+                            </button>
+                          ) : null}
+                        </div>
+                        {m.showStatusDetails && m.statusMessages && m.statusMessages.length > 0 ? (
+                          <ul className="mt-2 space-y-1">
+                            {m.statusMessages.map((s, i) => (
+                              <li key={i} className="truncate">{s}</li>
+                            ))}
+                          </ul>
+                        ) : null}
                       </div>
-                    )}
+                    ) : null}
                 </div>
               </div>
             ))
