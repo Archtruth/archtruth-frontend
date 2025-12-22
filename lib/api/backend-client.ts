@@ -5,6 +5,8 @@ import {
   backendFetch as backendFetchBase,
   chatStream as chatStreamBase,
   disconnectRepo as disconnectRepoBase,
+  listIngestionTasks as listIngestionTasksBase,
+  cancelIngestionJob as cancelIngestionJobBase,
   listDocuments as listDocumentsBase,
   presignDocument as presignDocumentBase,
   listOrgDocuments as listOrgDocumentsBase,
@@ -85,6 +87,14 @@ export function presignWikiPage(repoId: number, slug: string, token: string) {
 
 export function disconnectRepo(repoId: number, token: string) {
   return withAuthRedirect(() => disconnectRepoBase(repoId, token));
+}
+
+export function listIngestionTasks(repoId: number, token: string) {
+  return withAuthRedirect(() => listIngestionTasksBase(repoId, token));
+}
+
+export function cancelIngestionJob(jobId: number, token: string) {
+  return withAuthRedirect(() => cancelIngestionJobBase(jobId, token));
 }
 
 export { isBackendError };
