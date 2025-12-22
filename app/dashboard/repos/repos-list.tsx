@@ -407,8 +407,12 @@ export function ReposList({
                              {status ? (
                                  <div className="flex items-center gap-2">
                                    <StatusBadge status={status} />
-                                   {(status === "processing" || status === "pending") && (
-                                     <IngestionStatusPopover repoId={repo.id} token={token} jobId={getConnectedRepo(repo.id)?.latest_job?.id} />
+                                   {(status === "processing" || status === "pending") && getConnectedRepo(repo.id) && (
+                                     <IngestionStatusPopover
+                                       repoId={getConnectedRepo(repo.id)!.id}
+                                       token={token}
+                                       jobId={getConnectedRepo(repo.id)?.latest_job?.id}
+                                     />
                                    )}
                                  </div>
                              ) : isConnecting ? (
