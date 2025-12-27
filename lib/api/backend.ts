@@ -182,7 +182,8 @@ export async function listWikiPages(repoId: number, token: string) {
 }
 
 export async function presignWikiPage(repoId: number, slug: string, token: string) {
-  return backendFetch<{ url: string }>(`/wiki/by-repo/${repoId}/${encodeURIComponent(slug)}/presigned`, token);
+  const encoded = encodeURIComponent(slug);
+  return backendFetch<{ url: string }>(`/wiki/by-repo/${repoId}/presigned?slug=${encoded}`, token);
 }
 
 export async function disconnectRepo(repoId: number, token: string) {

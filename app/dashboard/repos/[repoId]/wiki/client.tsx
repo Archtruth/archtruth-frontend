@@ -1,15 +1,21 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { presignWikiPage } from "@/lib/api/backend-client";
 import { Button } from "@/components/ui/button";
-import { FileText, ChevronLeft, Calendar, Loader, BookOpen, Menu } from "lucide-react";
+import { FileText, ChevronLeft, Calendar, Loader, BookOpen, Menu, Search, List, ChevronRight } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 import { MermaidBlock } from "@/components/markdown/MermaidBlock";
+import { Input } from "@/components/ui/input";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 
 type WikiPage = {
   id: number;
@@ -60,6 +66,9 @@ export function RepoWikiPageClient({
   const [markdown, setMarkdown] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [toc, setToc] = useState<{ id: string; text: string; level: number }[]>([]);
 
   useEffect(() => {
     // Keep local state in sync with the URL so browser back/forward works.
@@ -82,9 +91,23 @@ export function RepoWikiPageClient({
       try {
         const content = await fetchWikiContent(repoId, selectedSlug, token);
         setMarkdown(content);
+        // Extract TOC
+        const headings: { id: string; text: string; level: number }[] = [];
+        const lines = content.split('\n');
+        lines.forEach((line) => {
+          const match = line.match(/^(#{2,3})\s+(.+)$/);
+          if (match) {
+            const level = match[1].length;
+            const text = match[2].trim();
+            const id = text.toLowerCase().replace(/[^\w]+/g, '-');
+            headings.push({ id, text, level });
+          }
+        });
+        setToc(headings);
       } catch (e) {
         console.error("Failed to load wiki page:", e);
         setMarkdown("Failed to load wiki page.");
+        setToc([]);
       } finally {
         setLoading(false);
       }
@@ -171,6 +194,7 @@ export function RepoWikiPageClient({
     // Drive state from the URL to avoid double loads; the sync effect updates `selectedSlug`.
     router.push(`${pathname}?page=${encodeURIComponent(slug)}`, { scroll: false });
     setMobileMenuOpen(false);
+    setSearchOpen(false);
   };
 
   const renderTree = (nodes: NavNode[], depth = 0) =>
@@ -215,13 +239,44 @@ export function RepoWikiPageClient({
       );
     });
 
+  const filteredPages = useMemo(() => {
+    if (!searchQuery) return [];
+    const q = searchQuery.toLowerCase();
+    return pages.filter(p => 
+      p.title.toLowerCase().includes(q) || 
+      p.slug.toLowerCase().includes(q) ||
+      (p.category && p.category.toLowerCase().includes(q))
+    ).slice(0, 10);
+  }, [pages, searchQuery]);
+
+  const breadcrumbs = useMemo(() => {
+    if (!selectedSlug) return [];
+    const parts = normalizeSlug(selectedSlug).split('/').filter(Boolean);
+    const crumbs = [];
+    let path = "";
+    for (const p of parts) {
+      path = path ? `${path}/${p}` : p;
+      // find page matching this path to get nice title, or fallback to humanized segment
+      const page = pages.find(pg => normalizeSlug(pg.slug) === path);
+      crumbs.push({
+        label: page?.title || humanize(p),
+        slug: page?.slug || null // only link if it's an actual page
+      });
+    }
+    return crumbs;
+  }, [selectedSlug, pages]);
+
   return (
     <div className="min-h-screen bg-gradient-to-b from-background via-background to-muted/40">
       {/* Header */}
       <div className="sticky top-0 z-30 border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:backdrop-blur">
         <div className="flex items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
-            <div className="h-9 w-9" />
+            <Link href={backHref}>
+              <Button variant="ghost" size="icon" className="h-9 w-9">
+                <ChevronLeft className="h-5 w-5" />
+              </Button>
+            </Link>
             <div>
               <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Wiki</p>
               <div className="flex items-center gap-2">
@@ -231,6 +286,45 @@ export function RepoWikiPageClient({
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <Popover open={searchOpen} onOpenChange={setSearchOpen}>
+              <PopoverTrigger asChild>
+                <Button variant="outline" size="sm" className="w-40 justify-start text-muted-foreground">
+                  <Search className="mr-2 h-4 w-4" />
+                  Search...
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-80 p-0" align="end">
+                <div className="p-2">
+                  <Input 
+                    placeholder="Search pages..." 
+                    value={searchQuery} 
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="h-8"
+                    autoFocus
+                  />
+                </div>
+                {searchQuery && (
+                  <div className="max-h-60 overflow-y-auto border-t">
+                    {filteredPages.length > 0 ? (
+                      <div className="p-1">
+                        {filteredPages.map(page => (
+                          <button
+                            key={page.id}
+                            className="w-full text-left px-3 py-2 text-sm hover:bg-muted rounded-sm flex flex-col gap-0.5"
+                            onClick={() => handleSelect(page.slug)}
+                          >
+                            <span className="font-medium">{page.title}</span>
+                            <span className="text-xs text-muted-foreground truncate">{page.slug}</span>
+                          </button>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="p-4 text-sm text-center text-muted-foreground">No results found.</p>
+                    )}
+                  </div>
+                )}
+              </PopoverContent>
+            </Popover>
             <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
               <Menu className="h-5 w-5" />
             </Button>
@@ -278,6 +372,29 @@ export function RepoWikiPageClient({
         {/* Main Content */}
         <main className="flex-1 overflow-y-auto bg-background/60">
           <div className="max-w-6xl mx-auto px-5 py-8 lg:px-10">
+            {/* Breadcrumbs */}
+            {breadcrumbs.length > 0 && (
+              <nav className="mb-4 flex items-center text-sm text-muted-foreground">
+                {breadcrumbs.map((crumb, i) => (
+                  <div key={i} className="flex items-center">
+                    {i > 0 && <ChevronRight className="h-4 w-4 mx-1 opacity-50" />}
+                    {crumb.slug && i < breadcrumbs.length - 1 ? (
+                      <button 
+                        onClick={() => handleSelect(crumb.slug!)}
+                        className="hover:text-foreground hover:underline underline-offset-4 transition-colors"
+                      >
+                        {crumb.label}
+                      </button>
+                    ) : (
+                      <span className={cn(i === breadcrumbs.length - 1 && "font-medium text-foreground")}>
+                        {crumb.label}
+                      </span>
+                    )}
+                  </div>
+                ))}
+              </nav>
+            )}
+
             {pages.length === 0 ? (
               <div className="flex flex-col items-center justify-center h-full text-center">
                 <div className="bg-muted p-4 rounded-full mb-4">
@@ -292,94 +409,136 @@ export function RepoWikiPageClient({
                 <p>Select a page from the sidebar to view content.</p>
               </div>
             ) : (
-              <div className="space-y-6">
-                <div className="rounded-xl border bg-card/80 backdrop-blur shadow-sm p-6">
-                  <div className="flex flex-wrap items-center justify-between gap-4">
-                    <div>
-                      <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">Component</p>
-                      <h1 className="text-3xl font-bold leading-tight">{selected?.title}</h1>
-                      <p className="text-sm text-muted-foreground mt-1">{selectedSlug}</p>
+              <div className="grid grid-cols-1 lg:grid-cols-[1fr_200px] gap-6">
+                <div className="space-y-6 min-w-0">
+                  <div className="rounded-xl border bg-card/80 backdrop-blur shadow-sm p-6">
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                      <div>
+                        <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">Component</p>
+                        <h1 className="text-3xl font-bold leading-tight">{selected?.title}</h1>
+                        <p className="text-sm text-muted-foreground mt-1">{selectedSlug}</p>
+                      </div>
                     </div>
+                    {selected?.updated_at && (
+                      <div className="mt-4 flex items-center text-sm text-muted-foreground">
+                        <Calendar className="h-4 w-4 mr-2" />
+                        Last updated: {new Date(selected.updated_at).toLocaleDateString()}
+                      </div>
+                    )}
                   </div>
-                  {selected?.updated_at && (
-                    <div className="mt-4 flex items-center text-sm text-muted-foreground">
-                      <Calendar className="h-4 w-4 mr-2" />
-                      Last updated: {new Date(selected.updated_at).toLocaleDateString()}
-                    </div>
-                  )}
-                </div>
 
-                <div className="rounded-xl border bg-card/80 backdrop-blur shadow-sm p-6">
-                  {loading ? (
-                    <div className="flex items-center justify-center py-12">
-                      <Loader className="h-8 w-8 animate-spin text-primary" />
-                    </div>
-                  ) : (
-                    <article className="prose dark:prose-invert max-w-none prose-headings:scroll-mt-24">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkGfm]}
-                        components={{
-                          pre: ({ children, ...props }) => {
-                            const childClass =
-                              (props as any)?.children?.props?.className || (Array.isArray(children) && (children as any)[0]?.props?.className) || "";
-                            const isMermaid = childClass.includes("language-mermaid");
+                  <div className="rounded-xl border bg-card/80 backdrop-blur shadow-sm p-6">
+                    {loading ? (
+                      <div className="flex items-center justify-center py-12">
+                        <Loader className="h-8 w-8 animate-spin text-primary" />
+                      </div>
+                    ) : (
+                      <article className="prose dark:prose-invert max-w-none prose-headings:scroll-mt-24">
+                        <ReactMarkdown
+                          remarkPlugins={[remarkGfm]}
+                          components={{
+                            h2: ({node, ...props}) => {
+                              const id = props.children?.toString().toLowerCase().replace(/[^\w]+/g, '-') || '';
+                              return <h2 id={id} {...props} />;
+                            },
+                            h3: ({node, ...props}) => {
+                              const id = props.children?.toString().toLowerCase().replace(/[^\w]+/g, '-') || '';
+                              return <h3 id={id} {...props} />;
+                            },
+                            pre: ({ children, ...props }) => {
+                              const childClass =
+                                (props as any)?.children?.props?.className || (Array.isArray(children) && (children as any)[0]?.props?.className) || "";
+                              const isMermaid = childClass.includes("language-mermaid");
 
-                            // For mermaid, let the diagram render cleanly without padded/light container.
-                            if (isMermaid) {
-                              return <div className="not-prose my-4">{children}</div>;
-                            }
+                              // For mermaid, let the diagram render cleanly without padded/light container.
+                              if (isMermaid) {
+                                return <div className="not-prose my-4">{children}</div>;
+                              }
 
-                            // Default code fences: light-mode styled block with scroll.
-                            return (
-                              <pre
-                                {...props}
-                                className={cn(
-                                  "not-prose my-4 rounded-md border bg-white text-black p-3 overflow-x-auto text-sm",
-                                  (props as any)?.className
-                                )}
-                              >
-                                {children}
-                              </pre>
-                            );
-                          },
-                          a: ({ href, children, ...props }) => {
-                            const h = href || "";
-                            if (h.startsWith("wiki:")) {
-                              const target = h.slice("wiki:".length);
+                              // Default code fences: light-mode styled block with scroll.
                               return (
-                                <button
-                                  type="button"
-                                  className="text-primary underline underline-offset-4 hover:opacity-90"
-                                  onClick={() => handleSelect(target)}
+                                <pre
+                                  {...props}
+                                  className={cn(
+                                    "not-prose my-4 rounded-md border bg-white text-black p-3 overflow-x-auto text-sm",
+                                    (props as any)?.className
+                                  )}
                                 >
                                   {children}
-                                </button>
+                                </pre>
                               );
-                            }
-                            return (
-                              <a href={href} {...props} target="_blank" rel="noreferrer">
-                                {children}
+                            },
+                            a: ({ href, children, ...props }) => {
+                              const h = href || "";
+                              if (h.startsWith("wiki:")) {
+                                const target = h.slice("wiki:".length);
+                                return (
+                                  <button
+                                    type="button"
+                                    className="text-primary underline underline-offset-4 hover:opacity-90"
+                                    onClick={() => handleSelect(target)}
+                                  >
+                                    {children}
+                                  </button>
+                                );
+                              }
+                              return (
+                                <a href={href} {...props} target="_blank" rel="noreferrer">
+                                  {children}
+                                </a>
+                              );
+                            },
+                            code: ({ className, children, ...props }: any) => {
+                              const text = String(children ?? "").replace(/\n$/, "");
+                              const match = /language-(\w+)/.exec(className || "");
+                              if (match?.[1] === "mermaid") {
+                                return <MermaidBlock code={text} />;
+                              }
+                              return (
+                                <code className={className} {...props}>
+                                  {children}
+                                </code>
+                              );
+                            },
+                          }}
+                        >
+                          {markdown}
+                        </ReactMarkdown>
+                      </article>
+                    )}
+                  </div>
+                </div>
+
+                {/* Right TOC (Desktop) */}
+                <div className="hidden lg:block">
+                  <div className="sticky top-24 space-y-4">
+                    {toc.length > 0 && (
+                      <div className="text-sm">
+                        <h4 className="font-semibold mb-2 flex items-center gap-2">
+                          <List className="h-4 w-4" /> On this page
+                        </h4>
+                        <ul className="space-y-1 border-l border-border/50 ml-1">
+                          {toc.map((item) => (
+                            <li key={item.id}>
+                              <a
+                                href={`#${item.id}`}
+                                onClick={(e) => {
+                                  e.preventDefault();
+                                  document.getElementById(item.id)?.scrollIntoView({ behavior: 'smooth' });
+                                }}
+                                className={cn(
+                                  "block py-1 border-l-2 border-transparent pl-3 -ml-[1px] hover:border-primary/50 hover:text-foreground transition-colors text-muted-foreground truncate",
+                                  item.level === 3 && "pl-6"
+                                )}
+                              >
+                                {item.text}
                               </a>
-                            );
-                          },
-                          code: ({ className, children, ...props }: any) => {
-                            const text = String(children ?? "").replace(/\n$/, "");
-                            const match = /language-(\w+)/.exec(className || "");
-                            if (match?.[1] === "mermaid") {
-                              return <MermaidBlock code={text} />;
-                            }
-                            return (
-                              <code className={className} {...props}>
-                                {children}
-                              </code>
-                            );
-                          },
-                        }}
-                      >
-                        {markdown}
-                      </ReactMarkdown>
-                    </article>
-                  )}
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
             )}
