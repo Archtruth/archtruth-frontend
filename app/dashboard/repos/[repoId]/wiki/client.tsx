@@ -7,7 +7,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { FileText, ChevronLeft, Calendar, Loader, BookOpen, Menu } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
+import { MermaidBlock } from "@/components/markdown/MermaidBlock";
 
 type WikiPage = {
   id: number;
@@ -193,7 +195,45 @@ export function RepoWikiPageClient({
                 </div>
               ) : (
                 <article className="prose dark:prose-invert max-w-none">
-                  <ReactMarkdown>{markdown}</ReactMarkdown>
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={{
+                      a: ({ href, children, ...props }) => {
+                        const h = href || "";
+                        if (h.startsWith("wiki:")) {
+                          const target = h.slice("wiki:".length);
+                          return (
+                            <button
+                              type="button"
+                              className="text-primary underline underline-offset-4 hover:opacity-90"
+                              onClick={() => setSelectedSlug(target)}
+                            >
+                              {children}
+                            </button>
+                          );
+                        }
+                        return (
+                          <a href={href} {...props} target="_blank" rel="noreferrer">
+                            {children}
+                          </a>
+                        );
+                      },
+                      code: ({ className, children, ...props }: any) => {
+                        const text = String(children ?? "").replace(/\n$/, "");
+                        const match = /language-(\w+)/.exec(className || "");
+                        if (match?.[1] === "mermaid") {
+                          return <MermaidBlock code={text} />;
+                        }
+                        return (
+                          <code className={className} {...props}>
+                            {children}
+                          </code>
+                        );
+                      },
+                    }}
+                  >
+                    {markdown}
+                  </ReactMarkdown>
                 </article>
               )}
             </div>
