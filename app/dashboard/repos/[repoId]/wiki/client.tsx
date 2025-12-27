@@ -168,7 +168,7 @@ export function RepoWikiPageClient({
 
   const handleSelect = (slug: string) => {
     if (!slug) return;
-    setSelectedSlug(slug);
+    // Drive state from the URL to avoid double loads; the sync effect updates `selectedSlug`.
     router.push(`${pathname}?page=${encodeURIComponent(slug)}`, { scroll: false });
     setMobileMenuOpen(false);
   };
@@ -192,10 +192,7 @@ export function RepoWikiPageClient({
                   : "border-transparent hover:border-border hover:bg-muted/70 text-foreground/80 hover:text-foreground"
               )}
             >
-              <div className="flex items-center gap-2">
-                <div className="h-1.5 w-1.5 rounded-full bg-primary/70" />
-                <span className="truncate">{node.label}</span>
-              </div>
+              <span className="truncate">{node.label}</span>
             </button>
           ) : (
             <div
@@ -224,9 +221,7 @@ export function RepoWikiPageClient({
       <div className="sticky top-0 z-30 border-b bg-background/80 backdrop-blur supports-[backdrop-filter]:backdrop-blur">
         <div className="flex items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => router.back()} aria-label="Go back">
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
+            <div className="h-9 w-9" />
             <div>
               <p className="text-xs uppercase tracking-[0.12em] text-muted-foreground">Wiki</p>
               <div className="flex items-center gap-2">
@@ -239,11 +234,6 @@ export function RepoWikiPageClient({
             <Button variant="ghost" size="icon" className="md:hidden" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
               <Menu className="h-5 w-5" />
             </Button>
-            <Link href={backHref}>
-              <Button variant="outline" size="sm">
-                Back to Repos
-              </Button>
-            </Link>
           </div>
         </div>
       </div>
@@ -309,16 +299,6 @@ export function RepoWikiPageClient({
                       <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">Component</p>
                       <h1 className="text-3xl font-bold leading-tight">{selected?.title}</h1>
                       <p className="text-sm text-muted-foreground mt-1">{selectedSlug}</p>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button variant="outline" size="sm" onClick={() => router.back()}>
-                        Back
-                      </Button>
-                      <Link href={backHref}>
-                        <Button size="sm" variant="secondary">
-                          Repo overview
-                        </Button>
-                      </Link>
                     </div>
                   </div>
                   {selected?.updated_at && (
