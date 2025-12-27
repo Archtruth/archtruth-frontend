@@ -198,6 +198,22 @@ export function RepoWikiPageClient({
                   <ReactMarkdown
                     remarkPlugins={[remarkGfm]}
                     components={{
+                      pre: ({ children, ...props }) => {
+                        // `react-markdown` wraps fenced code blocks in <pre>. Our wiki content should
+                        // always render these in light mode (even if the app is in dark mode), so we
+                        // render a light-styled <pre> and opt out of `prose` styling via `not-prose`.
+                        return (
+                          <pre
+                            {...props}
+                            className={cn(
+                              "not-prose my-4 rounded-md border bg-white text-black p-3 overflow-x-auto text-sm",
+                              (props as any)?.className
+                            )}
+                          >
+                            {children}
+                          </pre>
+                        );
+                      },
                       a: ({ href, children, ...props }) => {
                         const h = href || "";
                         if (h.startsWith("wiki:")) {
