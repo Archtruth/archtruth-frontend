@@ -100,25 +100,6 @@ async function ReposContent({ searchParams }: Props) {
         </Link>
       </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Organization</CardTitle>
-          <CardDescription>Switch between your organizations.</CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-wrap gap-2">
-          {orgs.map((org) => {
-            const isActive = org.id === selectedOrgId;
-            return (
-              <Link key={org.id} href={`/dashboard/repos?org_id=${org.id}`}>
-                <Button variant={isActive ? "default" : "outline"} size="sm">
-                  {org.name}
-                </Button>
-              </Link>
-            );
-          })}
-        </CardContent>
-      </Card>
-
       <ReposList
         initialInstallations={installations}
         initialReposByInstall={reposByInstall}

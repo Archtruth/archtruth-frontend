@@ -44,6 +44,9 @@ async function fetchWikiContent(repoId: number, slug: string, token: string): Pr
   return resp.text();
 }
 
+// Category order for navigation
+const CATEGORY_ORDER = ["overview", "architecture", "guides", "modules", "api", "generated", "general"];
+
 export function RepoWikiPageClient({
   repoId,
   token,
@@ -174,12 +177,11 @@ export function RepoWikiPageClient({
     return tree;
   }, [pages]);
 
-  const categoryOrder = ["overview", "architecture", "guides", "modules", "api", "generated", "general"];
   const sortedCategories = useMemo(() => {
     const categories = Object.keys(navTree);
     return categories.sort((a, b) => {
-      const ia = categoryOrder.indexOf(a.toLowerCase());
-      const ib = categoryOrder.indexOf(b.toLowerCase());
+      const ia = CATEGORY_ORDER.indexOf(a.toLowerCase());
+      const ib = CATEGORY_ORDER.indexOf(b.toLowerCase());
       if (ia !== -1 && ib !== -1) return ia - ib;
       if (ia !== -1) return -1;
       if (ib !== -1) return 1;

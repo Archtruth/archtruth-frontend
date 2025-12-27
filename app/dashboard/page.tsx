@@ -95,6 +95,25 @@ async function DashboardContent() {
   const orgs = orgsResp.organizations || [];
   const hasOrg = orgs.length > 0;
 
+  // Fetch installations for each org to check if they have GitHub connected
+  const orgsWithInstallations = await Promise.all(
+    orgs.map(async (org) => {
+      try {
+        const installationsResp = await backendFetch<{ installations: any[] }>(
+          `/orgs/${org.id}/installations`,
+          token
+        );
+        return {
+          ...org,
+          hasInstallations: (installationsResp.installations || []).length > 0,
+        };
+      } catch (e) {
+        // If error, assume no installations
+        return { ...org, hasInstallations: false };
+      }
+    })
+  );
+
   const providerToken = (session as any)?.provider_token as string | undefined;
   let githubOrgs: GithubOrgRow[] = [];
   let githubError: string | null = null;
@@ -109,6 +128,8 @@ async function DashboardContent() {
     }
   }
 
+  const hasAnyInstallations = orgsWithInstallations.some((org) => org.hasInstallations);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -117,9 +138,11 @@ async function DashboardContent() {
           <p className="text-mutedForeground">Manage organizations and GitHub installations.</p>
         </div>
         <div className="flex gap-2">
-          <Link href="/dashboard/connect-github">
-            <Button>Connect GitHub</Button>
-          </Link>
+          {!hasAnyInstallations && hasOrg && (
+            <Link href="/dashboard/connect-github">
+              <Button>Connect GitHub</Button>
+            </Link>
+          )}
           <Link href="/dashboard/repos">
             <Button variant="outline">View repos</Button>
           </Link>
@@ -224,18 +247,20 @@ async function DashboardContent() {
             <CardDescription>Select an organization to manage installations.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-3">
-            {orgs.map((org) => (
+            {orgsWithInstallations.map((org) => (
               <div key={org.id} className="flex items-center justify-between rounded-md border border-border p-3">
                 <div>
                   <div className="font-medium">{org.name}</div>
                   <div className="text-xs text-mutedForeground">{org.id}</div>
                 </div>
                 <div className="flex gap-2">
-                  <Link href={`/dashboard/connect-github?org_id=${org.id}`}>
-                    <Button size="sm" variant="outline">
-                      Connect GitHub
-                    </Button>
-                  </Link>
+                  {!org.hasInstallations && (
+                    <Link href={`/dashboard/connect-github?org_id=${org.id}`}>
+                      <Button size="sm" variant="outline">
+                        Connect GitHub
+                      </Button>
+                    </Link>
+                  )}
                   <Link href={`/dashboard/repos?org_id=${org.id}`}>
                     <Button size="sm">View repos</Button>
                   </Link>

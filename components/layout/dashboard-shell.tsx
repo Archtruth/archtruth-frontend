@@ -86,7 +86,24 @@ export function DashboardShell({
   }, [orgId]);
 
   const activeHref = useMemo(() => {
-    const match = scopedNavItems.find((i) => pathname?.startsWith(i.href.replace(/\\?org_id=.*/, "")));
+    if (!pathname) return undefined;
+    
+    // Extract base path from href (remove query params)
+    const getBasePath = (href: string) => href.split('?')[0];
+    
+    // For each nav item, check if current pathname matches
+    const match = scopedNavItems.find((item) => {
+      const basePath = getBasePath(item.href);
+      
+      // Exact match for dashboard home
+      if (basePath === "/dashboard") {
+        return pathname === "/dashboard";
+      }
+      
+      // Prefix match for all other routes
+      return pathname.startsWith(basePath);
+    });
+    
     return match?.href;
   }, [pathname, scopedNavItems]);
 
@@ -94,6 +111,8 @@ export function DashboardShell({
     setOrgId(val);
     // Default: take user to repos list scoped to org.
     router.push(`/dashboard/repos?org_id=${encodeURIComponent(val)}`);
+    // Force a refresh to ensure server components re-fetch
+    router.refresh();
   };
 
   return (

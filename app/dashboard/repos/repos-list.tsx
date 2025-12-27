@@ -165,6 +165,14 @@ export function ReposList({
   const [repoToDisconnect, setRepoToDisconnect] = useState<{ id: number; full_name: string } | null>(null);
   const [disconnecting, setDisconnecting] = useState(false);
 
+  // Sync state when orgId changes and new initial data comes in
+  useEffect(() => {
+    setConnectedRepos(initialConnectedRepos);
+    setConnectingMap({});
+    setConnectErrorMap({});
+    setRetryQueueMap({});
+  }, [orgId, initialConnectedRepos]);
+
   const fetchRepos = async () => {
     const res = await backendFetch<{ repositories: ConnectedRepo[] }>(`/orgs/${orgId}/repositories`, token);
     if (res.repositories) setConnectedRepos(res.repositories);
