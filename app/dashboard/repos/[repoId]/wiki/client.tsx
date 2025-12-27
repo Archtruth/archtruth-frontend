@@ -320,9 +320,16 @@ export function RepoWikiPageClient({
                         remarkPlugins={[remarkGfm]}
                         components={{
                           pre: ({ children, ...props }) => {
-                            // `react-markdown` wraps fenced code blocks in <pre>. Our wiki content should
-                            // always render these in light mode (even if the app is in dark mode), so we
-                            // render a light-styled <pre> and opt out of `prose` styling via `not-prose`.
+                            const childClass =
+                              (props as any)?.children?.props?.className || (Array.isArray(children) && (children as any)[0]?.props?.className) || "";
+                            const isMermaid = childClass.includes("language-mermaid");
+
+                            // For mermaid, let the diagram render cleanly without padded/light container.
+                            if (isMermaid) {
+                              return <div className="not-prose my-4">{children}</div>;
+                            }
+
+                            // Default code fences: light-mode styled block with scroll.
                             return (
                               <pre
                                 {...props}
