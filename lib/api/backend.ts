@@ -117,6 +117,10 @@ export async function backendFetch<T>(
   if (!token) {
     throw new Error("Not authenticated: missing Supabase access token");
   }
+  
+  // If signal is provided, don't retry on abort
+  const shouldRetry = !init?.signal;
+  
   const resp = await fetchWithRetry(`${backendUrl}${path}`, {
     ...init,
     headers: {
@@ -125,7 +129,7 @@ export async function backendFetch<T>(
       ...(init?.headers || {}),
     },
     cache: "no-store",
-    maxRetries: 3,
+    maxRetries: shouldRetry ? 3 : 0,
     retryDelay: 3000, // 3 seconds between retries
     timeout: 90000, // 90 seconds for cold starts (Render free tier can take 60-90s)
   });

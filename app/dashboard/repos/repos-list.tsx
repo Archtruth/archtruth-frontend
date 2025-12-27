@@ -207,12 +207,19 @@ export function ReposList({
     if (!shouldPoll) return;
 
     let cancelled = false;
+    const abortController = new AbortController();
 
     async function pollOnce() {
       try {
-        const res = await backendFetch<{ repositories: ConnectedRepo[] }>(`/orgs/${orgId}/repositories`, token);
+        const res = await backendFetch<{ repositories: ConnectedRepo[] }>(
+          `/orgs/${orgId}/repositories`, 
+          token,
+          { signal: abortController.signal }
+        );
         if (!cancelled && res.repositories) setConnectedRepos(res.repositories);
-      } catch (e) {
+      } catch (e: any) {
+        // Ignore abort errors
+        if (e?.name === 'AbortError' || cancelled) return;
         console.error("Failed to poll repos", e);
       }
     }
@@ -223,6 +230,7 @@ export function ReposList({
 
     return () => {
       cancelled = true;
+      abortController.abort();
       clearInterval(interval);
     };
   }, [shouldPoll, orgId, token]);

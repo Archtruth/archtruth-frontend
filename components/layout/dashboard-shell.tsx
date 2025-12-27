@@ -1,10 +1,8 @@
 "use client";
 
-"use client";
-
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useRef } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -22,6 +20,7 @@ import {
   Library,
   Network,
   Search,
+  Loader2,
 } from "lucide-react";
 
 export type NavItem = {
@@ -62,12 +61,53 @@ export function DashboardShell({
 }: DashboardShellProps) {
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
   const [orgId, setOrgId] = useState<string | undefined>(currentOrgId || orgOptions?.[0]?.id);
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const transitionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+  // Sync orgId with URL query parameter or path parameter
   useEffect(() => {
-    if (currentOrgId) setOrgId(currentOrgId);
-    else if (orgOptions?.[0]?.id) setOrgId(orgOptions[0].id);
-  }, [currentOrgId, orgOptions]);
+    // First check query parameter (e.g., /dashboard/repos?org_id=xyz)
+    const urlOrgId = searchParams.get("org_id");
+    if (urlOrgId) {
+      setOrgId(urlOrgId);
+      // Clear transitioning state when URL updates (navigation complete)
+      setIsTransitioning(false);
+      if (transitionTimeoutRef.current) {
+        clearTimeout(transitionTimeoutRef.current);
+        transitionTimeoutRef.current = null;
+      }
+      return;
+    }
+    
+    // Then check path parameter (e.g., /dashboard/orgs/xyz/docs)
+    const orgPathMatch = pathname?.match(/\/dashboard\/orgs\/([^/]+)/);
+    if (orgPathMatch?.[1]) {
+      setOrgId(orgPathMatch[1]);
+      // Clear transitioning state when URL updates (navigation complete)
+      setIsTransitioning(false);
+      if (transitionTimeoutRef.current) {
+        clearTimeout(transitionTimeoutRef.current);
+        transitionTimeoutRef.current = null;
+      }
+      return;
+    }
+    
+    // Fallback to currentOrgId or first org
+    if (currentOrgId) {
+      setOrgId(currentOrgId);
+    } else if (orgOptions?.[0]?.id) {
+      setOrgId(orgOptions[0].id);
+    }
+    
+    // Always clear transitioning when effect runs
+    setIsTransitioning(false);
+    if (transitionTimeoutRef.current) {
+      clearTimeout(transitionTimeoutRef.current);
+      transitionTimeoutRef.current = null;
+    }
+  }, [searchParams, pathname, currentOrgId, orgOptions]);
 
   const scopedNavItems = useMemo(() => {
     if (!orgId) return baseNavItems;
@@ -108,12 +148,48 @@ export function DashboardShell({
   }, [pathname, scopedNavItems]);
 
   const handleOrgChange = (val: string) => {
+    // Immediately show loading state
+    setIsTransitioning(true);
     setOrgId(val);
-    // Default: take user to repos list scoped to org.
-    router.push(`/dashboard/repos?org_id=${encodeURIComponent(val)}`);
+    
+    // Set a safety timeout to clear loading after 30 seconds
+    if (transitionTimeoutRef.current) {
+      clearTimeout(transitionTimeoutRef.current);
+    }
+    transitionTimeoutRef.current = setTimeout(() => {
+      setIsTransitioning(false);
+    }, 30000);
+    
+    // Update the current page's org context instead of redirecting
+    if (!pathname) return;
+    
+    // For path-based org routes like /dashboard/orgs/{orgId}/docs
+    if (pathname.match(/\/dashboard\/orgs\/[^/]+/)) {
+      const newPath = pathname.replace(/\/dashboard\/orgs\/[^/]+/, `/dashboard/orgs/${encodeURIComponent(val)}`);
+      router.push(newPath);
+    } 
+    // For query-based routes like /dashboard/repos?org_id=xyz
+    else if (pathname.startsWith('/dashboard/repos') || pathname.startsWith('/dashboard/chat')) {
+      const newUrl = `${pathname}?org_id=${encodeURIComponent(val)}`;
+      router.push(newUrl);
+    }
+    // For dashboard home or other routes without org context, go to repos
+    else if (pathname === '/dashboard' || pathname === '/dashboard/connect-github') {
+      router.push(`/dashboard/repos?org_id=${encodeURIComponent(val)}`);
+    }
+    
     // Force a refresh to ensure server components re-fetch
     router.refresh();
   };
+  
+  // Cleanup timeout on unmount
+  useEffect(() => {
+    return () => {
+      if (transitionTimeoutRef.current) {
+        clearTimeout(transitionTimeoutRef.current);
+      }
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col">
@@ -223,7 +299,15 @@ export function DashboardShell({
 
         <main className="flex-1 space-y-4">
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-          {children}
+            {isTransitioning ? (
+              <div className="flex flex-col items-center justify-center py-24">
+                <Loader2 className="h-12 w-12 animate-spin text-slate-400 mb-4" />
+                <p className="text-lg font-medium text-slate-700">Switching organization...</p>
+                <p className="text-sm text-slate-500 mt-2">Loading data for the selected organization</p>
+              </div>
+            ) : (
+              children
+            )}
           </div>
         </main>
       </div>

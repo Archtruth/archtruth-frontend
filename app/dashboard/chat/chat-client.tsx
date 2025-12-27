@@ -9,7 +9,6 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 type Citation = {
   doc_id?: number;
@@ -35,30 +34,35 @@ type Message = {
   showStatusDetails?: boolean;
 };
 
-type Org = { id: string; name: string };
 type Repo = { id: number; full_name: string };
 
 export function ChatClient({
   token,
-  initialOrgs,
-  initialReposByOrg = {},
+  orgId,
+  initialRepos,
 }: {
   token: string;
-  initialOrgs: Org[];
-  initialReposByOrg?: Record<string, Repo[]>;
+  orgId: string;
+  initialRepos: Repo[];
 }) {
   const [query, setQuery] = useState("");
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [orgs] = useState<Org[]>(initialOrgs || []);
-  const [selectedOrgId, setSelectedOrgId] = useState<string | undefined>(initialOrgs?.[0]?.id);
-  const [reposByOrg, setReposByOrg] = useState<Record<string, Repo[]>>(initialReposByOrg);
-  const [selectedRepoIds, setSelectedRepoIds] = useState<number[]>([]);
+  const [repos, setRepos] = useState<Repo[]>(initialRepos);
+  const [selectedRepoIds, setSelectedRepoIds] = useState<number[]>(initialRepos.map((r) => r.id));
   const [allReposSelected, setAllReposSelected] = useState<boolean>(true);
-  const [loadingRepos, setLoadingRepos] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const abortRef = useRef<AbortController | null>(null);
+
+  // Reset state when org changes
+  useEffect(() => {
+    setRepos(initialRepos);
+    setSelectedRepoIds(initialRepos.map((r) => r.id));
+    setAllReposSelected(true);
+    setMessages([]);
+    setError(null);
+  }, [orgId, initialRepos]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -66,37 +70,10 @@ export function ChatClient({
     }
   }, [messages, loading]);
 
-  useEffect(() => {
-    async function loadRepos(orgId: string) {
-      if (!orgId || reposByOrg[orgId]) return;
-      setLoadingRepos(true);
-      try {
-        const resp = await backendFetch<{ repositories: Repo[] }>(`/orgs/${orgId}/repositories`, token);
-        setReposByOrg((prev) => ({ ...prev, [orgId]: resp.repositories || [] }));
-        setSelectedRepoIds((resp.repositories || []).map((r) => r.id));
-      } catch (e) {
-        console.error("Failed to load repositories", e);
-      } finally {
-        setLoadingRepos(false);
-      }
-    }
-    if (selectedOrgId) {
-      loadRepos(selectedOrgId);
-    }
-  }, [selectedOrgId, reposByOrg, token]);
-
-  useEffect(() => {
-    if (selectedOrgId && reposByOrg[selectedOrgId]) {
-      const ids = reposByOrg[selectedOrgId].map((r) => r.id);
-      setSelectedRepoIds(ids);
-      setAllReposSelected(true);
-    }
-  }, [selectedOrgId, reposByOrg]);
-
   const send = async () => {
     if (!token || !query.trim()) return;
-    if (!selectedOrgId || selectedRepoIds.length === 0) {
-      setError("Select an org and at least one repository.");
+    if (selectedRepoIds.length === 0) {
+      setError("Select at least one repository.");
       return;
     }
     
@@ -198,32 +175,15 @@ export function ChatClient({
   return (
     <div className="flex flex-col h-[calc(100vh-140px)] max-h-[800px] min-h-[500px]">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-2xl font-semibold">Chat with your Codebase</h1>
+        <div>
+          <h1 className="text-2xl font-semibold">Chat with your Codebase</h1>
+          <p className="text-sm text-mutedForeground mt-1">
+            Organization scoped to your selection in the header
+          </p>
+        </div>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2 mb-4">
-        <div className="flex flex-col gap-2">
-          <label className="text-sm font-medium">Organization</label>
-          <Select
-            value={selectedOrgId}
-            onValueChange={(val) => {
-              setSelectedOrgId(val);
-              setSelectedRepoIds([]);
-            }}
-          >
-            <SelectTrigger>
-              <SelectValue placeholder="Select org" />
-            </SelectTrigger>
-            <SelectContent>
-              {orgs.map((org) => (
-                <SelectItem key={org.id} value={org.id}>
-                  {org.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-
+      <div className="mb-4">
         <div className="flex flex-col gap-2">
           <label className="text-sm font-medium">Repositories (defaults to all)</label>
           <div className="rounded-md border border-border/60 p-3 bg-muted/40 space-y-2">
@@ -234,9 +194,9 @@ export function ChatClient({
                 onChange={(e) => {
                   const checked = e.target.checked;
                   setAllReposSelected(checked);
-                  if (checked && selectedOrgId && reposByOrg[selectedOrgId]) {
-                    setSelectedRepoIds(reposByOrg[selectedOrgId].map((r) => r.id));
-                  } else if (!checked) {
+                  if (checked) {
+                    setSelectedRepoIds(repos.map((r) => r.id));
+                  } else {
                     setSelectedRepoIds([]);
                   }
                 }}
@@ -244,7 +204,7 @@ export function ChatClient({
               <span className="text-sm">All repositories in org</span>
             </div>
             <div className="space-y-1 max-h-48 overflow-y-auto">
-              {(selectedOrgId ? reposByOrg[selectedOrgId] || [] : []).map((repo) => {
+              {repos.map((repo) => {
                 const checked = selectedRepoIds.includes(repo.id);
                 return (
                   <label key={repo.id} className="flex items-center gap-2 text-sm">
@@ -263,8 +223,8 @@ export function ChatClient({
                   </label>
                 );
               })}
-              {selectedOrgId && (reposByOrg[selectedOrgId] || []).length === 0 && (
-                <p className="text-xs text-mutedForeground">{loadingRepos ? "Loading repos..." : "No repos yet."}</p>
+              {repos.length === 0 && (
+                <p className="text-xs text-mutedForeground">No repos found for this organization.</p>
               )}
             </div>
           </div>

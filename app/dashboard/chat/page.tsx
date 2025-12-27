@@ -4,21 +4,27 @@ import { getServerSession } from "@/lib/supabase/server";
 import { backendFetch, isUnauthorizedBackendError } from "@/lib/api/backend";
 import { ChatClient } from "./chat-client";
 
-export default function ChatPage() {
+type Props = {
+  searchParams: { [key: string]: string | string[] | undefined };
+};
+
+export default function ChatPage({ searchParams }: Props) {
   return (
     <Suspense fallback={<div>Loading chat...</div>}>
-      <ChatPageInner />
+      <ChatPageInner searchParams={searchParams} />
     </Suspense>
   );
 }
 
-async function ChatPageInner() {
+async function ChatPageInner({ searchParams }: Props) {
   const session = await getServerSession();
   const token = session?.access_token;
   if (!token) {
     redirect("/?login=1&error=session_expired");
   }
 
+  const orgIdParam = Array.isArray(searchParams["org_id"]) ? searchParams["org_id"][0] : searchParams["org_id"];
+  
   let orgsResp: { organizations: { id: string; name: string }[] };
   try {
     orgsResp = await backendFetch<{ organizations: { id: string; name: string }[] }>("/orgs", token);
@@ -29,21 +35,27 @@ async function ChatPageInner() {
     throw e;
   }
   const orgs = orgsResp.organizations || [];
+  const selectedOrgId = orgIdParam || orgs[0]?.id;
 
-  const reposByOrg: Record<string, any[]> = {};
-  if (orgs.length > 0) {
-    const firstOrg = orgs[0].id;
-    try {
-      const reposResp = await backendFetch<{ repositories: any[] }>(`/orgs/${firstOrg}/repositories`, token);
-      reposByOrg[firstOrg] = reposResp.repositories || [];
-    } catch (e) {
-      if (isUnauthorizedBackendError(e)) {
-        redirect("/?login=1&error=session_expired");
-      }
-      throw e;
-    }
+  if (!selectedOrgId) {
+    return (
+      <div className="text-center py-12">
+        <p className="text-mutedForeground mb-4">No organizations found. Create one from the dashboard.</p>
+      </div>
+    );
   }
 
-  return <ChatClient token={token} initialOrgs={orgs} initialReposByOrg={reposByOrg} />;
+  let repos: any[] = [];
+  try {
+    const reposResp = await backendFetch<{ repositories: any[] }>(`/orgs/${selectedOrgId}/repositories`, token);
+    repos = reposResp.repositories || [];
+  } catch (e) {
+    if (isUnauthorizedBackendError(e)) {
+      redirect("/?login=1&error=session_expired");
+    }
+    throw e;
+  }
+
+  return <ChatClient token={token} orgId={selectedOrgId} initialRepos={repos} />;
 }
 
