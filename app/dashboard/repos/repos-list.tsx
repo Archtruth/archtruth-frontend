@@ -452,21 +452,7 @@ export function ReposList({
                                       alert("Repository is connected, but its internal ID wasn't found yet. Please wait a moment and try again.");
                                       return;
                                     }
-                                    router.push(`/dashboard/repos/${connected.id}/docs?org_id=${orgId}`);
-                                  }}
-                                >
-                                    View Docs
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => {
-                                    const connected = getConnectedRepo(repo.id);
-                                    if (!connected) {
-                                      alert("Repository is connected, but its internal ID wasn't found yet. Please wait a moment and try again.");
-                                      return;
-                                    }
-                                    router.push(`/dashboard/repos/${connected.id}/wiki?org_id=${orgId}`);
+                                    router.push(`/wiki/${connected.id}?org_id=${orgId}`);
                                   }}
                                 >
                                   View Wiki
