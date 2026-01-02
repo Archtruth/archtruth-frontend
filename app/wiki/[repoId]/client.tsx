@@ -10,6 +10,7 @@ import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
 import { MermaidBlock } from "@/components/markdown/MermaidBlock";
+import { TableOfContents } from "@/components/wiki/TableOfContents";
 import { Input } from "@/components/ui/input";
 import {
   Popover,
@@ -24,6 +25,8 @@ type WikiPage = {
   category?: string;
   nav_order?: number;
   updated_at?: string;
+  last_indexed_commit_sha?: string;
+  indexed_at?: string;
 };
 
 type OrgDoc = {
@@ -197,29 +200,7 @@ export function FullScreenWikiClient({
   const [searchQuery, setSearchQuery] = useState("");
   const [services, setServices] = useState<Service[]>([]);
 
-  // Initialize services from wiki pages (for repos without org docs)
-  useEffect(() => {
-    const orgServicesDoc = orgDocs.find(doc => doc.file_path === 'org_services.md');
-
-    if (orgServicesDoc && orgId) {
-      // Parse org services document
-      fetchOrgDocContent(orgId, 'org_services.md', token)
-        .then((content) => {
-          const parsedServices = parseOrgServicesDoc(content);
-          setServices(parsedServices);
-        })
-        .catch((e) => {
-          console.error("Failed to load org services:", e);
-          // Fallback to wiki pages
-          initializeFromWikiPages();
-        });
-    } else {
-      // Default behavior for wiki pages when no org services doc
-      initializeFromWikiPages();
-    }
-  }, [pages, orgDocs, orgId, token]);
-
-  const initializeFromWikiPages = () => {
+  const initializeFromWikiPages = useCallback(() => {
     const serviceMap = new Map<string, WikiPage[]>();
 
     pages.forEach((page) => {
@@ -246,7 +227,29 @@ export function FullScreenWikiClient({
       .sort((a, b) => a.name.localeCompare(b.name));
 
     setServices(servicesArray);
-  };
+  }, [pages]);
+
+  // Initialize services from wiki pages (for repos without org docs)
+  useEffect(() => {
+    const orgServicesDoc = orgDocs.find(doc => doc.file_path === 'org_services.md');
+
+    if (orgServicesDoc && orgId) {
+      // Parse org services document
+      fetchOrgDocContent(orgId, 'org_services.md', token)
+        .then((content) => {
+          const parsedServices = parseOrgServicesDoc(content);
+          setServices(parsedServices);
+        })
+        .catch((e) => {
+          console.error("Failed to load org services:", e);
+          // Fallback to wiki pages
+          initializeFromWikiPages();
+        });
+    } else {
+      // Default behavior for wiki pages when no org services doc
+      initializeFromWikiPages();
+    }
+  }, [pages, orgDocs, orgId, token, initializeFromWikiPages]);
 
   // Initialize selection from URL or defaults
   useEffect(() => {
@@ -464,6 +467,29 @@ export function FullScreenWikiClient({
         {/* Left Sidebar - Services */}
         <aside className="w-72 border-r bg-background/95 overflow-y-auto">
           <div className="p-4 space-y-4">
+            {/* Metadata Section */}
+            {(selectedPage || selectedDoc) && (
+              <div className="px-2 py-2 border-b border-border/60 mb-2">
+                <p className="text-xs text-muted-foreground">
+                  {selectedPage?.updated_at && (
+                    <>
+                      Last indexed: {new Date(selectedPage.updated_at).toLocaleDateString()}
+                      {selectedPage.last_indexed_commit_sha && (
+                        <span className="ml-1 font-mono text-[10px]">
+                          ({selectedPage.last_indexed_commit_sha.substring(0, 6)})
+                        </span>
+                      )}
+                    </>
+                  )}
+                  {selectedDoc?.updated_at && (
+                    <>
+                      Last indexed: {new Date(selectedDoc.updated_at).toLocaleDateString()}
+                    </>
+                  )}
+                </p>
+              </div>
+            )}
+
             {/* Org Docs Section */}
             {orgDocs.length > 0 && (
               <div className="space-y-2">
@@ -569,7 +595,7 @@ export function FullScreenWikiClient({
 
         {/* Main Content */}
         <main className="flex-1 overflow-y-auto bg-background">
-          <div className="max-w-5xl mx-auto px-8 py-8">
+          <div className="max-w-4xl mx-auto px-8 py-8">
             {loading ? (
               <div className="flex items-center justify-center py-24">
                 <Loader className="h-8 w-8 animate-spin text-primary" />
@@ -592,10 +618,37 @@ export function FullScreenWikiClient({
                 </div>
 
                 <div className="rounded-xl border bg-card/80 backdrop-blur shadow-sm p-6">
-                  <article className="prose dark:prose-invert max-w-none prose-headings:scroll-mt-24">
+                  <article className="prose dark:prose-invert max-w-none prose-headings:scroll-mt-24 prose-headings:font-semibold prose-h2:text-2xl prose-h2:mt-8 prose-h2:mb-4 prose-h3:text-xl prose-h3:mt-6 prose-h3:mb-3 prose-h4:text-lg prose-h4:mt-4 prose-h4:mb-2 prose-p:my-4 prose-ul:my-4 prose-ol:my-4 prose-li:my-1">
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
                       components={{
+                        h2: ({ children, ...props }) => {
+                          const title = String(children);
+                          const id = title.toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-") || "section";
+                          return (
+                            <h2 id={id} className="scroll-mt-24" {...props}>
+                              {children}
+                            </h2>
+                          );
+                        },
+                        h3: ({ children, ...props }) => {
+                          const title = String(children);
+                          const id = title.toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-") || "section";
+                          return (
+                            <h3 id={id} className="scroll-mt-24" {...props}>
+                              {children}
+                            </h3>
+                          );
+                        },
+                        h4: ({ children, ...props }) => {
+                          const title = String(children);
+                          const id = title.toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-") || "section";
+                          return (
+                            <h4 id={id} className="scroll-mt-24" {...props}>
+                              {children}
+                            </h4>
+                          );
+                        },
                         pre: ({ children, ...props }) => {
                           const childClass =
                             (props as any)?.children?.props?.className ||
@@ -604,14 +657,14 @@ export function FullScreenWikiClient({
                           const isMermaid = childClass.includes("language-mermaid");
 
                           if (isMermaid) {
-                            return <div className="not-prose my-4">{children}</div>;
+                            return <div className="not-prose my-6">{children}</div>;
                           }
 
                           return (
                             <pre
                               {...props}
                               className={cn(
-                                "not-prose my-4 rounded-md border bg-white text-black p-3 overflow-x-auto text-sm",
+                                "not-prose my-4 rounded-md border bg-muted/50 p-4 overflow-x-auto text-sm",
                                 (props as any)?.className
                               )}
                             >
@@ -626,7 +679,7 @@ export function FullScreenWikiClient({
                             return <MermaidBlock code={text} />;
                           }
                           return (
-                            <code className={className} {...props}>
+                            <code className={cn("bg-muted/50 px-1.5 py-0.5 rounded text-sm", className)} {...props}>
                               {children}
                             </code>
                           );
@@ -657,10 +710,37 @@ export function FullScreenWikiClient({
                 </div>
 
                 <div className="rounded-xl border bg-card/80 backdrop-blur shadow-sm p-6">
-                  <article className="prose dark:prose-invert max-w-none prose-headings:scroll-mt-24">
+                  <article className="prose dark:prose-invert max-w-none prose-headings:scroll-mt-24 prose-headings:font-semibold prose-h2:text-2xl prose-h2:mt-8 prose-h2:mb-4 prose-h3:text-xl prose-h3:mt-6 prose-h3:mb-3 prose-h4:text-lg prose-h4:mt-4 prose-h4:mb-2 prose-p:my-4 prose-ul:my-4 prose-ol:my-4 prose-li:my-1">
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm]}
                       components={{
+                        h2: ({ children, ...props }) => {
+                          const title = String(children);
+                          const id = title.toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-") || "section";
+                          return (
+                            <h2 id={id} className="scroll-mt-24" {...props}>
+                              {children}
+                            </h2>
+                          );
+                        },
+                        h3: ({ children, ...props }) => {
+                          const title = String(children);
+                          const id = title.toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-") || "section";
+                          return (
+                            <h3 id={id} className="scroll-mt-24" {...props}>
+                              {children}
+                            </h3>
+                          );
+                        },
+                        h4: ({ children, ...props }) => {
+                          const title = String(children);
+                          const id = title.toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-") || "section";
+                          return (
+                            <h4 id={id} className="scroll-mt-24" {...props}>
+                              {children}
+                            </h4>
+                          );
+                        },
                         pre: ({ children, ...props }) => {
                           const childClass =
                             (props as any)?.children?.props?.className ||
@@ -669,14 +749,14 @@ export function FullScreenWikiClient({
                           const isMermaid = childClass.includes("language-mermaid");
 
                           if (isMermaid) {
-                            return <div className="not-prose my-4">{children}</div>;
+                            return <div className="not-prose my-6">{children}</div>;
                           }
 
                           return (
                             <pre
                               {...props}
                               className={cn(
-                                "not-prose my-4 rounded-md border bg-white text-black p-3 overflow-x-auto text-sm",
+                                "not-prose my-4 rounded-md border bg-muted/50 p-4 overflow-x-auto text-sm",
                                 (props as any)?.className
                               )}
                             >
@@ -691,7 +771,7 @@ export function FullScreenWikiClient({
                             return <MermaidBlock code={text} />;
                           }
                           return (
-                            <code className={className} {...props}>
+                            <code className={cn("bg-muted/50 px-1.5 py-0.5 rounded text-sm", className)} {...props}>
                               {children}
                             </code>
                           );
@@ -719,7 +799,7 @@ export function FullScreenWikiClient({
                             }
                           }
                           return (
-                            <a href={href} {...props} target="_blank" rel="noreferrer">
+                            <a href={h} {...props} target="_blank" rel="noreferrer">
                               {children}
                             </a>
                           );
@@ -739,6 +819,15 @@ export function FullScreenWikiClient({
             )}
           </div>
         </main>
+
+        {/* Right Sidebar - Table of Contents */}
+        <aside className="hidden lg:block w-64 border-l bg-background/95 overflow-y-auto">
+          <div className="p-6">
+            {(selectedType === "module" || selectedType === "org-doc") && markdown && (
+              <TableOfContents markdown={markdown} />
+            )}
+          </div>
+        </aside>
       </div>
     </div>
   );
