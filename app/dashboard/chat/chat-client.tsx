@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { Send, User, Bot, FileText, Loader2 } from "lucide-react";
+import { Send, User, Bot, FileText, Loader2, AlertTriangle } from "lucide-react";
 import { chatStream, backendFetch } from "@/lib/api/backend-client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,8 @@ type Message = {
   currentStatus?: string;
   showStatusDetails?: boolean;
   toolResults?: ToolResult[];
+  error?: string;
+  isError?: boolean;
 };
 
 type Repo = { id: number; full_name: string };
@@ -60,6 +62,7 @@ export function ChatClient({
   const [messages, setMessages] = useState<Message[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [streamingStartTime, setStreamingStartTime] = useState<number | null>(null);
   const [repos, setRepos] = useState<Repo[]>(initialRepos);
   const [selectedRepoIds, setSelectedRepoIds] = useState<number[]>(initialRepos.map((r) => r.id));
   const [allReposSelected, setAllReposSelected] = useState<boolean>(true);
@@ -96,6 +99,7 @@ export function ChatClient({
     const userMsg: Message = { role: "user", content: currentQuery, id: Date.now().toString() };
     const botMsgId = (Date.now() + 1).toString();
     setMessages((prev) => [...prev, userMsg, { role: "assistant", content: "", id: botMsgId }]);
+    setStreamingStartTime(Date.now());
 
     const controller = new AbortController();
     abortRef.current = controller;
@@ -185,23 +189,65 @@ export function ChatClient({
                   : m)
               );
             } else if (obj.event === "error") {
-              const message = obj.message || "The assistant hit an error.";
+              const errorMessage = obj.message || "The assistant encountered an error while processing your request.";
               setMessages((prev) =>
-                prev.map(m => m.id === botMsgId ? { ...m, content: message } : m)
+                prev.map(m => m.id === botMsgId ? {
+                  ...m,
+                  content: errorMessage,
+                  error: errorMessage,
+                  isError: true,
+                  currentStatus: undefined,
+                  statusMessages: undefined
+                } : m)
               );
+              setError(null); // Clear global error since it's handled in the message
             }
           } catch {
             // ignore parse errors
           }
         }
       }
+
+      // Check for timeout (30 seconds)
+      const checkTimeout = () => {
+        if (streamingStartTime && Date.now() - streamingStartTime > 30000) {
+          controller.abort();
+          const timeoutMessage = "Request timed out. The server may be experiencing high load. Please try again.";
+          setMessages((prev) =>
+            prev.map(m => m.id === botMsgId ? {
+              ...m,
+              content: timeoutMessage,
+              error: timeoutMessage,
+              isError: true,
+              currentStatus: undefined,
+              statusMessages: undefined
+            } : m)
+          );
+        }
+      };
+
+      const timeoutId = setTimeout(checkTimeout, 31000); // Check slightly after 30s
+
+      clearTimeout(timeoutId); // Clear timeout when done
+
     } catch (e: any) {
       if (e?.name !== "AbortError") {
-        setError(e?.message || "Chat failed");
-        setMessages((prev) => prev.slice(0, -1)); // Remove the empty bot message on error
+        const errorMessage = e?.message || "Failed to send message. Please check your connection and try again.";
+        setMessages((prev) =>
+          prev.map(m => m.id === botMsgId ? {
+            ...m,
+            content: errorMessage,
+            error: errorMessage,
+            isError: true,
+            currentStatus: undefined,
+            statusMessages: undefined
+          } : m)
+        );
+        setError(null); // Clear global error since it's handled in the message
       }
     } finally {
       setLoading(false);
+      setStreamingStartTime(null);
     }
   };
 
@@ -305,6 +351,8 @@ export function ChatClient({
                         "rounded-lg px-4 py-2 text-sm shadow-sm",
                         m.role === "user"
                           ? "bg-primary text-primary-foreground"
+                          : m.isError
+                          ? "bg-destructive/10 text-destructive border border-destructive/20"
                           : "bg-muted text-foreground"
                       )}
                     >
@@ -331,6 +379,33 @@ export function ChatClient({
                           </div>
                       ) : (
                           <div className="whitespace-pre-wrap">{m.content}</div>
+                      )}
+
+                      {m.isError && m.role === "assistant" && (
+                        <div className="mt-2 flex items-center gap-2">
+                          <AlertTriangle className="h-3 w-3 text-destructive" />
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-7 text-xs border-destructive/20 hover:border-destructive/40"
+                            onClick={() => {
+                              // Find the corresponding user message and retry
+                              const userMessageIndex = messages.findIndex(msg => msg.role === "user" && msg.id === String(parseInt(m.id) - 1));
+                              if (userMessageIndex >= 0) {
+                                const userMessage = messages[userMessageIndex];
+                                // Remove error message and retry
+                                setMessages(prev => prev.filter(msg => msg.id !== m.id));
+                                // Retry with the original query
+                                const originalQuery = userMessage.content;
+                                setQuery(originalQuery);
+                                setTimeout(() => send(), 100); // Small delay to ensure state updates
+                              }
+                            }}
+                          >
+                            🔄 Retry
+                          </Button>
+                          <span className="text-xs text-muted-foreground">Message failed to send</span>
+                        </div>
                       )}
                     </div>
                     {m.citations && m.citations.length > 0 && (
@@ -456,7 +531,11 @@ export function ChatClient({
                  </Avatar>
                  <div className="bg-muted text-foreground rounded-lg px-4 py-2 text-sm shadow-sm flex items-center">
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    Thinking...
+                    {streamingStartTime && Date.now() - streamingStartTime > 10000
+                      ? "Taking a bit longer... Analyzing your complex query"
+                      : streamingStartTime && Date.now() - streamingStartTime > 5000
+                      ? "Searching documentation and code..."
+                      : "Thinking..."}
                  </div>
              </div>
           )}
