@@ -150,17 +150,23 @@ export function ChatClient({
 
               // Make status messages more user-friendly
               if (message.includes("Setting up research strategy")) {
-                message = "Preparing to research your question...";
+                message = "Analyzing your complex question and planning research approach...";
               } else if (message.includes("Gathering initial evidence")) {
-                message = "Collecting relevant information...";
+                message = "Collecting relevant information from documentation and code...";
               } else if (message.includes("Found relevant information")) {
-                message = "Analyzing gathered information...";
+                message = "Analyzing gathered information and building understanding...";
               } else if (message.includes("Starting research")) {
-                message = "Beginning detailed research...";
+                message = "Beginning detailed research and investigation...";
               } else if (message.includes("Gathering more details")) {
-                message = "Finding additional details...";
+                message = "Finding additional details and connections...";
               } else if (message.includes("Refining analysis")) {
-                message = "Refining the analysis...";
+                message = "Refining the analysis with deeper investigation...";
+              } else if (message.includes("Time budget reached")) {
+                message = "Completing comprehensive analysis with findings...";
+              } else if (message.includes("Providing comprehensive partial analysis")) {
+                message = "Finalizing detailed findings and next steps...";
+              } else if (message.includes("synthesis")) {
+                message = "Synthesizing comprehensive answer from all evidence...";
               }
 
               setMessages((prev) =>
