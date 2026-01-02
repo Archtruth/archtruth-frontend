@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FileText, ChevronLeft, Calendar, Loader } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import { MermaidBlock } from "@/components/markdown/MermaidBlock";
 
 type Document = {
   id: number;
@@ -145,7 +146,24 @@ export function OrgDocsPageClient({
                       </div>
                     ) : (
                       <article className="prose dark:prose-invert max-w-none">
-                        <ReactMarkdown>{markdown}</ReactMarkdown>
+                        <ReactMarkdown
+                          components={{
+                            code: ({ className, children, ...props }: any) => {
+                              const text = String(children ?? "").replace(/\n$/, "");
+                              const match = /language-(\w+)/.exec(className || "");
+                              if (match?.[1] === "mermaid") {
+                                return <MermaidBlock code={text} />;
+                              }
+                              return (
+                                <code className={className} {...props}>
+                                  {children}
+                                </code>
+                              );
+                            },
+                          }}
+                        >
+                          {markdown}
+                        </ReactMarkdown>
                       </article>
                     )}
                   </CardContent>

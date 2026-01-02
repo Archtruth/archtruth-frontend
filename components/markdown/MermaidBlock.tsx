@@ -55,21 +55,17 @@ export function MermaidBlock({ code }: { code: string }) {
 
   if (error) {
     return (
-      <pre className="not-prose p-3 rounded-md bg-muted text-sm overflow-auto">
+      <pre className="text-sm text-red-600 bg-red-50 p-2 rounded border">
         Mermaid render error: {error}
       </pre>
     );
   }
 
   if (!svg) {
-    return <div className="not-prose text-sm text-muted-foreground">Rendering diagram…</div>;
+    return <div className="text-sm text-muted-foreground">Rendering diagram…</div>;
   }
 
-  return (
-    <div className="not-prose my-4 rounded-md border bg-white text-black p-2 overflow-x-auto">
-      <div dangerouslySetInnerHTML={{ __html: svg }} />
-    </div>
-  );
+  return <div dangerouslySetInnerHTML={{ __html: svg }} />;
 }
 
 

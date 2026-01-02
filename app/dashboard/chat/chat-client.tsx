@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { MermaidBlock } from "@/components/markdown/MermaidBlock";
 
 type Citation = {
   doc_id?: number;
@@ -22,6 +23,15 @@ type Citation = {
   chunk_index?: number;
   start_offset?: number;
   end_offset?: number;
+  snippet?: string;
+};
+
+type ToolResult = {
+  tool: string;
+  query?: string;
+  result_count?: number;
+  summary: string;
+  preview?: string;
 };
 
 type Message = {
@@ -32,6 +42,7 @@ type Message = {
   statusMessages?: string[];
   currentStatus?: string;
   showStatusDetails?: boolean;
+  toolResults?: ToolResult[];
 };
 
 type Repo = { id: number; full_name: string };
@@ -131,7 +142,23 @@ export function ChatClient({
                 prev.map(m => m.id === botMsgId ? { ...m, content: currentText } : m)
               );
             } else if (obj.event === "status") {
-              const message = obj.message || obj.phase || "Working...";
+              let message = obj.message || obj.phase || "Working...";
+
+              // Make status messages more user-friendly
+              if (message.includes("Setting up research strategy")) {
+                message = "Preparing to research your question...";
+              } else if (message.includes("Gathering initial evidence")) {
+                message = "Collecting relevant information...";
+              } else if (message.includes("Found relevant information")) {
+                message = "Analyzing gathered information...";
+              } else if (message.includes("Starting research")) {
+                message = "Beginning detailed research...";
+              } else if (message.includes("Gathering more details")) {
+                message = "Finding additional details...";
+              } else if (message.includes("Refining analysis")) {
+                message = "Refining the analysis...";
+              }
+
               setMessages((prev) =>
                 prev.map(m => m.id === botMsgId
                   ? (() => {
@@ -139,9 +166,22 @@ export function ChatClient({
                       const msg = String(message);
                       // De-dupe consecutive duplicates and cap log size for a cleaner UI.
                       const last = prevLog.length > 0 ? prevLog[prevLog.length - 1] : null;
-                      const nextLog = last === msg ? prevLog : [...prevLog, msg].slice(-20);
+                      const nextLog = last === msg ? prevLog : [...prevLog, msg].slice(-15); // Reduced from 20 to 15
                       return { ...m, currentStatus: msg, statusMessages: nextLog };
                     })()
+                  : m)
+              );
+            } else if (obj.event === "tool_result") {
+              const toolResult: ToolResult = {
+                tool: obj.tool,
+                query: obj.query,
+                result_count: obj.result_count,
+                summary: obj.summary,
+                preview: obj.preview
+              };
+              setMessages((prev) =>
+                prev.map(m => m.id === botMsgId
+                  ? { ...m, toolResults: [...(m.toolResults || []), toolResult] }
                   : m)
               );
             } else if (obj.event === "error") {
@@ -270,7 +310,24 @@ export function ChatClient({
                     >
                       {m.role === "assistant" ? (
                           <div className="prose prose-sm dark:prose-invert max-w-none">
-                            <ReactMarkdown>{m.content}</ReactMarkdown>
+                            <ReactMarkdown
+                              components={{
+                                code: ({ className, children, ...props }: any) => {
+                                  const text = String(children ?? "").replace(/\n$/, "");
+                                  const match = /language-(\w+)/.exec(className || "");
+                                  if (match?.[1] === "mermaid") {
+                                    return <MermaidBlock code={text} />;
+                                  }
+                                  return (
+                                    <code className={className} {...props}>
+                                      {children}
+                                    </code>
+                                  );
+                                },
+                              }}
+                            >
+                              {m.content}
+                            </ReactMarkdown>
                           </div>
                       ) : (
                           <div className="whitespace-pre-wrap">{m.content}</div>
@@ -279,41 +336,82 @@ export function ChatClient({
                     {m.citations && m.citations.length > 0 && (
                         <div className="mt-2 text-xs text-mutedForeground bg-muted/50 p-2 rounded border border-border w-full">
                             <div className="font-semibold mb-1 flex items-center gap-1">
-                                <FileText className="h-3 w-3" /> Sources
+                                <FileText className="h-3 w-3" /> Sources ({m.citations.length})
                             </div>
-                            <ul className="space-y-1">
-                                {m.citations.map((c, i) => (
-                                    <li key={i} className="truncate" title={c.file_path}>
-                                        {c.url ? (
-                                          <a
-                                            href={c.url}
-                                            target="_blank"
-                                            rel="noreferrer"
-                                            className="underline underline-offset-2 hover:text-foreground"
-                                          >
-                                            {c.file_path}
-                                          </a>
-                                        ) : (
-                                          <span>{c.file_path}</span>
-                                        )}{" "}
-                                        {c.commit_sha ? (
-                                          <span className="opacity-60 font-mono">[{c.commit_sha.slice(0,7)}]</span>
-                                        ) : null}{" "}
-                                        {c.start_offset !== undefined && c.end_offset !== undefined ? (
-                                          <span className="opacity-60 font-mono">[{c.start_offset}-{c.end_offset}]</span>
-                                        ) : null}{" "}
-                                        {c.score !== undefined || c.similarity !== undefined ? (
-                                          <span className="opacity-50">
-                                            ({(c.score ?? c.similarity ?? 0).toFixed(2)})
-                                          </span>
-                                        ) : null}
-                                        {c.heading ? (
-                                          <span className="opacity-60"> · {c.heading}</span>
-                                        ) : null}
-                                    </li>
+                            <div className="space-y-2">
+                                {m.citations.slice(0, 5).map((c, i) => (
+                                    <div key={i} className="bg-white dark:bg-muted/30 p-2 rounded border">
+                                        <div className="flex items-start justify-between gap-2">
+                                            <div className="flex-1 min-w-0">
+                                                <div className="font-medium text-foreground truncate" title={c.file_path}>
+                                                    {c.url ? (
+                                                      <a
+                                                        href={c.url}
+                                                        target="_blank"
+                                                        rel="noreferrer"
+                                                        className="underline underline-offset-2 hover:text-foreground"
+                                                      >
+                                                        {c.file_path}
+                                                      </a>
+                                                    ) : (
+                                                      <span>{c.file_path}</span>
+                                                    )}
+                                                </div>
+                                                <div className="flex items-center gap-2 mt-1 text-xs opacity-60">
+                                                    {c.commit_sha && (
+                                                      <span className="font-mono">[{c.commit_sha.slice(0,7)}]</span>
+                                                    )}
+                                                    {c.start_offset !== undefined && c.end_offset !== undefined && (
+                                                      <span className="font-mono">lines {c.start_offset}-{c.end_offset}</span>
+                                                    )}
+                                                    {(c.score !== undefined || c.similarity !== undefined) && (
+                                                      <span>
+                                                        relevance: {(c.score ?? c.similarity ?? 0).toFixed(2)}
+                                                      </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            {c.heading && (
+                                                <div className="text-xs opacity-70 flex-shrink-0">
+                                                    {c.heading}
+                                                </div>
+                                            )}
+                                        </div>
+                                        {c.snippet && (
+                                            <div className="mt-2 p-2 bg-muted/50 rounded text-xs font-mono">
+                                                <div className="truncate" title={c.snippet}>
+                                                    {c.snippet.length > 150 ? c.snippet.slice(0, 150) + "..." : c.snippet}
+                                                </div>
+                                            </div>
+                                        )}
+                                    </div>
                                 ))}
-                            </ul>
+                                {m.citations.length > 5 && (
+                                    <div className="text-center text-xs opacity-60">
+                                        ... and {m.citations.length - 5} more sources
+                                    </div>
+                                )}
+                            </div>
                         </div>
+                    )}
+                    {m.toolResults && m.toolResults.length > 0 && (
+                      <div className="mt-2 text-xs text-mutedForeground bg-blue-50 dark:bg-blue-950/20 p-3 rounded border border-blue-200 dark:border-blue-800 w-full">
+                        <div className="font-semibold mb-2 flex items-center gap-1">
+                          <FileText className="h-3 w-3" /> Research Findings
+                        </div>
+                        <div className="space-y-2">
+                          {m.toolResults.map((result, i) => (
+                            <div key={i} className="bg-white dark:bg-muted/30 p-2 rounded border">
+                              <div className="font-medium text-foreground text-xs">{result.summary}</div>
+                              {result.preview && (
+                                <div className="mt-1 text-xs opacity-80 italic">
+                                  &ldquo;{result.preview}&rdquo;
+                                </div>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
                     )}
                     {m.currentStatus ? (
                       <div className="mt-2 text-xs text-mutedForeground bg-muted/40 p-2 rounded border border-dashed w-full">
