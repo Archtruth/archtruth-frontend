@@ -77,6 +77,98 @@ function isModule(page: WikiPage): boolean {
   return slugParts.length > 1;
 }
 
+// Parse org services document to extract service hierarchy
+function parseOrgServicesDoc(content: string): Service[] {
+  const lines = content.split('\n');
+  const services: Service[] = [];
+  let currentService: Partial<Service> | null = null;
+  let inModulesSection = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+
+    // Check for service header (## Service Name or ### Service Name)
+    if ((trimmed.startsWith('## ') || trimmed.startsWith('### ')) && !trimmed.includes('Modules') && !trimmed.includes('Dependencies')) {
+      // Save previous service if exists
+      if (currentService?.name && currentService.modules) {
+        services.push(currentService as Service);
+      }
+
+      // Start new service - extract service name (skip the ## or ###)
+      const serviceName = trimmed.replace(/^#+\s*/, '').trim();
+      currentService = {
+        name: serviceName,
+        modules: []
+      };
+      inModulesSection = false;
+    }
+    // Check for modules section header
+    else if (currentService && (trimmed.toLowerCase().includes('modules') || trimmed.startsWith('### Modules'))) {
+      inModulesSection = true;
+    }
+    // Check for dependencies section (end of modules)
+    else if (currentService && (trimmed.toLowerCase().includes('dependencies') || trimmed.startsWith('### Dependencies'))) {
+      inModulesSection = false;
+    }
+    // Check for module items in modules section
+    else if (currentService && inModulesSection && (trimmed.startsWith('- ') || trimmed.startsWith('* '))) {
+      // Handle various module formats:
+      // - **Module Name** (category)
+      // - Module Name
+      // - **Module Name**
+      // - Zingo Domain Enums (plain text)
+      let moduleName = '';
+      let category: string | null = null;
+
+      // Remove the list marker
+      const content = trimmed.substring(trimmed.indexOf(' ') + 1);
+
+      // Try to match **Module Name** (category) format
+      const boldMatch = content.match(/^\*\*(.*?)\*\*(?:\s*\((.*?)\))?/);
+      if (boldMatch) {
+        moduleName = boldMatch[1].trim();
+        category = boldMatch[2] ? boldMatch[2].trim() : null;
+      } else {
+        // Try to extract plain module name (everything before any parentheses or just the whole line)
+        const plainMatch = content.match(/^(.+?)(?:\s*\((.*?)\))?\s*$/);
+        if (plainMatch) {
+          moduleName = plainMatch[1].trim();
+          category = plainMatch[2] ? plainMatch[2].trim() : null;
+        } else {
+          // Fallback: use the entire content as module name
+          moduleName = content.trim();
+        }
+      }
+
+      if (moduleName && moduleName.length > 0) {
+        currentService.modules!.push({
+          id: Date.now() + Math.random(), // Generate temp ID
+          slug: `${currentService.name}/${moduleName}`.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
+          title: moduleName,
+          category: category || undefined,
+          nav_order: undefined,
+          updated_at: undefined
+        });
+      }
+    }
+    // Check for horizontal rule (end of service section)
+    else if (currentService && trimmed.match(/^[-*_]{3,}$/)) {
+      inModulesSection = false;
+    }
+  }
+
+  // Save last service
+  if (currentService?.name && currentService.modules) {
+    services.push(currentService as Service);
+  }
+
+  // Debug logging
+  console.log('Org services content preview:', content.substring(0, 500));
+  console.log('Parsed services from org docs:', services);
+
+  return services;
+}
+
 export function FullScreenWikiClient({
   repoId,
   orgId,
@@ -103,11 +195,33 @@ export function FullScreenWikiClient({
   const [loading, setLoading] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [services, setServices] = useState<Service[]>([]);
 
-  // Organize pages into services and modules
-  const services = useMemo(() => {
+  // Initialize services from wiki pages (for repos without org docs)
+  useEffect(() => {
+    const orgServicesDoc = orgDocs.find(doc => doc.file_path === 'org_services.md');
+
+    if (orgServicesDoc && orgId) {
+      // Parse org services document
+      fetchOrgDocContent(orgId, 'org_services.md', token)
+        .then((content) => {
+          const parsedServices = parseOrgServicesDoc(content);
+          setServices(parsedServices);
+        })
+        .catch((e) => {
+          console.error("Failed to load org services:", e);
+          // Fallback to wiki pages
+          initializeFromWikiPages();
+        });
+    } else {
+      // Default behavior for wiki pages when no org services doc
+      initializeFromWikiPages();
+    }
+  }, [pages, orgDocs, orgId, token]);
+
+  const initializeFromWikiPages = () => {
     const serviceMap = new Map<string, WikiPage[]>();
-    
+
     pages.forEach((page) => {
       if (isModule(page)) {
         const serviceName = extractServiceName(page);
@@ -131,8 +245,8 @@ export function FullScreenWikiClient({
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
 
-    return servicesArray;
-  }, [pages]);
+    setServices(servicesArray);
+  };
 
   // Initialize selection from URL or defaults
   useEffect(() => {
@@ -204,6 +318,7 @@ export function FullScreenWikiClient({
         });
     }
   }, [selectedType, selectedOrgDoc, selectedModule, repoId, orgId, token]);
+
 
   const handleSelectOrgDoc = useCallback((filePath: string) => {
     setSelectedType("org-doc");
