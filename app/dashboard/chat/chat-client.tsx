@@ -17,6 +17,7 @@ type Citation = {
   file_path?: string;
   commit_sha?: string;
   url?: string | null;
+  title?: string;
   score?: number;
   similarity?: number;
   heading?: string;
