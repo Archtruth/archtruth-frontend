@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
-import { Send, User, Bot, FileText, Loader2, AlertTriangle } from "lucide-react";
+import { Send, User, Bot, FileText, Loader2, AlertTriangle, ExternalLink, Code } from "lucide-react";
 import { chatStream, backendFetch } from "@/lib/api/backend-client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -214,28 +214,6 @@ export function ChatClient({
         }
       }
 
-      // Check for timeout (30 seconds)
-      const checkTimeout = () => {
-        if (streamingStartTime && Date.now() - streamingStartTime > 30000) {
-          controller.abort();
-          const timeoutMessage = "Request timed out. The server may be experiencing high load. Please try again.";
-          setMessages((prev) =>
-            prev.map(m => m.id === botMsgId ? {
-              ...m,
-              content: timeoutMessage,
-              error: timeoutMessage,
-              isError: true,
-              currentStatus: undefined,
-              statusMessages: undefined
-            } : m)
-          );
-        }
-      };
-
-      const timeoutId = setTimeout(checkTimeout, 31000); // Check slightly after 30s
-
-      clearTimeout(timeoutId); // Clear timeout when done
-
     } catch (e: any) {
       if (e?.name !== "AbortError") {
         const errorMessage = e?.message || "Failed to send message. Please check your connection and try again.";
@@ -424,18 +402,23 @@ export function ChatClient({
                                     <div key={i} className="bg-white dark:bg-muted/30 p-2 rounded border">
                                         <div className="flex items-start justify-between gap-2">
                                             <div className="flex-1 min-w-0">
-                                                <div className="font-medium text-foreground truncate" title={c.file_path}>
+                                                <div className="font-medium text-foreground truncate" title={c.title || c.file_path}>
                                                     {c.url ? (
                                                       <a
                                                         href={c.url}
                                                         target="_blank"
                                                         rel="noreferrer"
-                                                        className="underline underline-offset-2 hover:text-foreground"
+                                                        className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400 underline underline-offset-2 hover:opacity-80"
                                                       >
-                                                        {c.file_path}
+                                                        <Code className="h-3 w-3 flex-shrink-0" />
+                                                        <span className="truncate">{c.title || c.file_path}</span>
+                                                        <ExternalLink className="h-3 w-3 flex-shrink-0 opacity-50" />
                                                       </a>
                                                     ) : (
-                                                      <span>{c.file_path}</span>
+                                                      <span className="inline-flex items-center gap-1">
+                                                        <Code className="h-3 w-3 flex-shrink-0 opacity-50" />
+                                                        {c.title || c.file_path}
+                                                      </span>
                                                     )}
                                                 </div>
                                                 <div className="flex items-center gap-2 mt-1 text-xs opacity-60">

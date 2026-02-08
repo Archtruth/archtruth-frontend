@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState, useRef } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { presignWikiPage } from "@/lib/api/backend-client";
 import { Button } from "@/components/ui/button";
-import { FileText, ChevronLeft, Calendar, Loader, BookOpen, Menu, Search, List, ChevronRight } from "lucide-react";
+import { FileText, ChevronLeft, Calendar, Loader, BookOpen, Menu, Search, List, ChevronRight, ExternalLink, Code } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
@@ -258,7 +258,7 @@ export function RepoWikiPageClient({
     let path = "";
     for (const p of parts) {
       path = path ? `${path}/${p}` : p;
-      // find page matching this path to get nice title, or fallback to humanized segment
+      // find page matching this path to get title, or humanize segment
       const page = pages.find(pg => normalizeSlug(pg.slug) === path);
       crumbs.push({
         label: page?.title || humanize(p),
@@ -472,6 +472,7 @@ export function RepoWikiPageClient({
                             },
                             a: ({ href, children, ...props }) => {
                               const h = href || "";
+                              // Wiki internal links
                               if (h.startsWith("wiki:")) {
                                 const target = h.slice("wiki:".length);
                                 return (
@@ -484,9 +485,34 @@ export function RepoWikiPageClient({
                                   </button>
                                 );
                               }
+                              // Handle code: protocol links (render file path inline)
+                              if (h.startsWith("code:")) {
+                                const filePath = h.slice("code:".length);
+                                return (
+                                  <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400">
+                                    <Code className="h-3 w-3 inline flex-shrink-0" />
+                                    <code className="text-sm bg-muted/50 px-1 py-0.5 rounded">{filePath}</code>
+                                  </span>
+                                );
+                              }
+                              // GitHub / source code links — show with code icon
+                              const isCodeLink = h.includes("/blob/") || h.includes("/-/blob/") || h.includes("/src/");
                               return (
-                                <a href={href} {...props} target="_blank" rel="noreferrer">
+                                <a
+                                  href={h}
+                                  {...props}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className={cn(
+                                    "underline underline-offset-4 hover:opacity-90",
+                                    isCodeLink
+                                      ? "text-blue-600 dark:text-blue-400 inline-flex items-center gap-1"
+                                      : "text-primary"
+                                  )}
+                                >
+                                  {isCodeLink && <Code className="h-3 w-3 inline flex-shrink-0" />}
                                   {children}
+                                  {isCodeLink && <ExternalLink className="h-3 w-3 inline flex-shrink-0 opacity-50" />}
                                 </a>
                               );
                             },

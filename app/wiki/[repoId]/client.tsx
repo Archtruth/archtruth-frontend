@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { presignWikiPage, presignOrgDocument } from "@/lib/api/backend-client";
 import { Button } from "@/components/ui/button";
-import { FileText, ChevronLeft, Calendar, Loader, BookOpen, Search, ChevronRight, Folder, FolderOpen } from "lucide-react";
+import { FileText, ChevronLeft, Calendar, Loader, BookOpen, Search, ChevronRight, Folder, FolderOpen, ExternalLink, Code } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
@@ -137,10 +137,9 @@ function parseOrgServicesDoc(content: string): Service[] {
         if (plainMatch) {
           moduleName = plainMatch[1].trim();
           category = plainMatch[2] ? plainMatch[2].trim() : null;
-        } else {
-          // Fallback: use the entire content as module name
-          moduleName = content.trim();
-        }
+      } else {
+        moduleName = content.trim();
+      }
       }
 
       if (moduleName && moduleName.length > 0) {
@@ -242,7 +241,6 @@ export function FullScreenWikiClient({
         })
         .catch((e) => {
           console.error("Failed to load org services:", e);
-          // Fallback to wiki pages
           initializeFromWikiPages();
         });
     } else {
@@ -778,6 +776,7 @@ export function FullScreenWikiClient({
                         },
                         a: ({ href, children, ...props }) => {
                           const h = href || "";
+                          // Wiki internal links
                           if (h.startsWith("wiki:")) {
                             const target = h.slice("wiki:".length);
                             const modulePage = pages.find((p) => p.slug === target);
@@ -798,9 +797,34 @@ export function FullScreenWikiClient({
                               }
                             }
                           }
+                          // Handle code: protocol links (render file path inline)
+                          if (h.startsWith("code:")) {
+                            const filePath = h.slice("code:".length);
+                            return (
+                              <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400">
+                                <Code className="h-3 w-3 inline flex-shrink-0" />
+                                <code className="text-sm bg-muted/50 px-1 py-0.5 rounded">{filePath}</code>
+                              </span>
+                            );
+                          }
+                          // GitHub / source code links — show with code icon
+                          const isCodeLink = h.includes("/blob/") || h.includes("/-/blob/") || h.includes("/src/");
                           return (
-                            <a href={h} {...props} target="_blank" rel="noreferrer">
+                            <a
+                              href={h}
+                              {...props}
+                              target="_blank"
+                              rel="noreferrer"
+                              className={cn(
+                                "underline underline-offset-4 hover:opacity-90",
+                                isCodeLink
+                                  ? "text-blue-600 dark:text-blue-400 inline-flex items-center gap-1"
+                                  : "text-primary"
+                              )}
+                            >
+                              {isCodeLink && <Code className="h-3 w-3 inline flex-shrink-0" />}
                               {children}
+                              {isCodeLink && <ExternalLink className="h-3 w-3 inline flex-shrink-0 opacity-50" />}
                             </a>
                           );
                         },
