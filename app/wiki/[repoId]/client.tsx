@@ -58,119 +58,6 @@ async function fetchOrgDocContent(orgId: string, fileName: string, token: string
   return resp.text();
 }
 
-// Extract service name from page slug or category
-function extractServiceName(page: WikiPage): string {
-  // Try to extract from slug path (e.g., "services/auth-service/module1" -> "auth-service")
-  const slugParts = page.slug.split("/").filter(Boolean);
-  if (slugParts.length > 1 && slugParts[0].toLowerCase().includes("service")) {
-    return slugParts[0];
-  }
-  // Try category
-  if (page.category) {
-    return page.category;
-  }
-  // Default to "General"
-  return "General";
-}
-
-// Check if a page is a module (not a service-level doc)
-function isModule(page: WikiPage): boolean {
-  const slugParts = page.slug.split("/").filter(Boolean);
-  // If it has multiple path segments, it's likely a module
-  return slugParts.length > 1;
-}
-
-// Parse org services document to extract service hierarchy
-function parseOrgServicesDoc(content: string): Service[] {
-  const lines = content.split('\n');
-  const services: Service[] = [];
-  let currentService: Partial<Service> | null = null;
-  let inModulesSection = false;
-
-  for (const line of lines) {
-    const trimmed = line.trim();
-
-    // Check for service header (## Service Name or ### Service Name)
-    if ((trimmed.startsWith('## ') || trimmed.startsWith('### ')) && !trimmed.includes('Modules') && !trimmed.includes('Dependencies')) {
-      // Save previous service if exists
-      if (currentService?.name && currentService.modules) {
-        services.push(currentService as Service);
-      }
-
-      // Start new service - extract service name (skip the ## or ###)
-      const serviceName = trimmed.replace(/^#+\s*/, '').trim();
-      currentService = {
-        name: serviceName,
-        modules: []
-      };
-      inModulesSection = false;
-    }
-    // Check for modules section header
-    else if (currentService && (trimmed.toLowerCase().includes('modules') || trimmed.startsWith('### Modules'))) {
-      inModulesSection = true;
-    }
-    // Check for dependencies section (end of modules)
-    else if (currentService && (trimmed.toLowerCase().includes('dependencies') || trimmed.startsWith('### Dependencies'))) {
-      inModulesSection = false;
-    }
-    // Check for module items in modules section
-    else if (currentService && inModulesSection && (trimmed.startsWith('- ') || trimmed.startsWith('* '))) {
-      // Handle various module formats:
-      // - **Module Name** (category)
-      // - Module Name
-      // - **Module Name**
-      // - Zingo Domain Enums (plain text)
-      let moduleName = '';
-      let category: string | null = null;
-
-      // Remove the list marker
-      const content = trimmed.substring(trimmed.indexOf(' ') + 1);
-
-      // Try to match **Module Name** (category) format
-      const boldMatch = content.match(/^\*\*(.*?)\*\*(?:\s*\((.*?)\))?/);
-      if (boldMatch) {
-        moduleName = boldMatch[1].trim();
-        category = boldMatch[2] ? boldMatch[2].trim() : null;
-      } else {
-        // Try to extract plain module name (everything before any parentheses or just the whole line)
-        const plainMatch = content.match(/^(.+?)(?:\s*\((.*?)\))?\s*$/);
-        if (plainMatch) {
-          moduleName = plainMatch[1].trim();
-          category = plainMatch[2] ? plainMatch[2].trim() : null;
-      } else {
-        moduleName = content.trim();
-      }
-      }
-
-      if (moduleName && moduleName.length > 0) {
-        currentService.modules!.push({
-          id: Date.now() + Math.random(), // Generate temp ID
-          slug: `${currentService.name}/${moduleName}`.toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, ''),
-          title: moduleName,
-          category: category || undefined,
-          nav_order: undefined,
-          updated_at: undefined
-        });
-      }
-    }
-    // Check for horizontal rule (end of service section)
-    else if (currentService && trimmed.match(/^[-*_]{3,}$/)) {
-      inModulesSection = false;
-    }
-  }
-
-  // Save last service
-  if (currentService?.name && currentService.modules) {
-    services.push(currentService as Service);
-  }
-
-  // Debug logging
-  console.log('Org services content preview:', content.substring(0, 500));
-  console.log('Parsed services from org docs:', services);
-
-  return services;
-}
-
 export function FullScreenWikiClient({
   repoId,
   orgId,
@@ -201,15 +88,21 @@ export function FullScreenWikiClient({
 
   const initializeFromWikiPages = useCallback(() => {
     const serviceMap = new Map<string, WikiPage[]>();
+    const normalizeSlug = (slug: string) => slug.replace(/\.(md|mdx)$/i, "");
 
     pages.forEach((page) => {
-      if (isModule(page)) {
-        const serviceName = extractServiceName(page);
-        if (!serviceMap.has(serviceName)) {
-          serviceMap.set(serviceName, []);
-        }
-        serviceMap.get(serviceName)!.push(page);
+      const normalized = normalizeSlug(page.slug);
+      const parts = normalized.split("/").filter(Boolean);
+      // Drive grouping from real wiki slugs so sidebar nodes always map to actual pages.
+      // This avoids synthetic slugs from org_services parsing that produce empty folders.
+      const serviceName =
+        parts.length > 1
+          ? parts[0]
+          : (page.category && page.category.trim().length > 0 ? page.category : "overview");
+      if (!serviceMap.has(serviceName)) {
+        serviceMap.set(serviceName, []);
       }
+      serviceMap.get(serviceName)!.push(page);
     });
 
     // Convert to array and sort
@@ -228,26 +121,11 @@ export function FullScreenWikiClient({
     setServices(servicesArray);
   }, [pages]);
 
-  // Initialize services from wiki pages (for repos without org docs)
+  // Always initialize navigation from real wiki pages.
+  // org_services.md remains useful as a content doc, but should not define module slugs.
   useEffect(() => {
-    const orgServicesDoc = orgDocs.find(doc => doc.file_path === 'org_services.md');
-
-    if (orgServicesDoc && orgId) {
-      // Parse org services document
-      fetchOrgDocContent(orgId, 'org_services.md', token)
-        .then((content) => {
-          const parsedServices = parseOrgServicesDoc(content);
-          setServices(parsedServices);
-        })
-        .catch((e) => {
-          console.error("Failed to load org services:", e);
-          initializeFromWikiPages();
-        });
-    } else {
-      // Default behavior for wiki pages when no org services doc
-      initializeFromWikiPages();
-    }
-  }, [pages, orgDocs, orgId, token, initializeFromWikiPages]);
+    initializeFromWikiPages();
+  }, [initializeFromWikiPages]);
 
   // Initialize selection from URL or defaults
   useEffect(() => {
@@ -280,14 +158,14 @@ export function FullScreenWikiClient({
       }
     }
 
-    // Default: select first org doc if available, otherwise first module
-    if (orgDocs.length > 0) {
-      setSelectedType("org-doc");
-      setSelectedOrgDoc(orgDocs[0].file_path);
-    } else if (services.length > 0 && services[0].modules.length > 0) {
+    // Default to the first module when available so "View Wiki" opens repo docs immediately.
+    if (services.length > 0 && services[0].modules.length > 0) {
       setSelectedType("module");
       setSelectedService(services[0].name);
       setSelectedModule(services[0].modules[0].slug);
+    } else if (orgDocs.length > 0) {
+      setSelectedType("org-doc");
+      setSelectedOrgDoc(orgDocs[0].file_path);
     }
   }, [orgDocs, services, searchParams]);
 
