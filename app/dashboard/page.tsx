@@ -18,6 +18,8 @@ type GithubOrgRow = {
   archtruth_org_name?: string | null;
 };
 
+const installUrl = process.env.NEXT_PUBLIC_GITHUB_APP_INSTALL_URL || "#";
+
 async function createOrg(formData: FormData) {
   "use server";
   const session = await getServerSession();
@@ -40,7 +42,7 @@ async function createOrg(formData: FormData) {
   revalidatePath("/dashboard");
 }
 
-async function joinGithubOrg(formData: FormData): Promise<void> {
+async function createWorkspaceAndInstall(formData: FormData): Promise<void> {
   "use server";
   const orgLogin = String(formData.get("org_login") || "").trim();
   if (!orgLogin) {
@@ -49,21 +51,16 @@ async function joinGithubOrg(formData: FormData): Promise<void> {
 
   const session = await getServerSession();
   const token = session?.access_token;
-  const providerToken = (session as any)?.provider_token as string | undefined;
-  if (!token || !providerToken) {
+  if (!token) {
     redirect("/?login=1&error=session_expired");
   }
 
-  let resp: { organization_id: string };
+  let created: { organization_id: string };
   try {
-    resp = await backendFetch<{ organization_id: string }>(
-      `/github/orgs/${encodeURIComponent(orgLogin)}/join`,
-      token,
-      {
-        method: "POST",
-        headers: { "X-GitHub-Token": providerToken },
-      }
-    );
+    created = await backendFetch<{ organization_id: string }>("/orgs", token, {
+      method: "POST",
+      body: JSON.stringify({ name: orgLogin }),
+    });
   } catch (e) {
     if (isUnauthorizedBackendError(e)) {
       redirect("/?login=1&error=session_expired");
@@ -71,9 +68,11 @@ async function joinGithubOrg(formData: FormData): Promise<void> {
     throw e;
   }
 
-  // After joining, take the user straight to repos for that workspace.
-  // This also avoids needing client-side state refresh logic.
-  redirect(`/dashboard/repos?org_id=${encodeURIComponent(resp.organization_id)}`);
+  if (!installUrl || installUrl === "#") {
+    redirect(`/dashboard/connect-github?org_id=${encodeURIComponent(created.organization_id)}`);
+  }
+
+  redirect(`${installUrl}?state=${encodeURIComponent(created.organization_id)}`);
 }
 
 async function DashboardContent() {
@@ -92,7 +91,63 @@ async function DashboardContent() {
     }
     throw e;
   }
-  const orgs = orgsResp.organizations || [];
+  let orgs = orgsResp.organizations || [];
+
+  const providerToken = (session as any)?.provider_token as string | undefined;
+  let githubOrgs: GithubOrgRow[] = [];
+  let githubError: string | null = null;
+  if (providerToken) {
+    try {
+      const ghResp = await backendFetch<{ github_orgs: GithubOrgRow[] }>("/github/orgs", token, {
+        headers: { "X-GitHub-Token": providerToken },
+      });
+      githubOrgs = ghResp.github_orgs || [];
+    } catch (e: any) {
+      githubError = e?.message || "Failed to fetch GitHub organizations.";
+    }
+  }
+
+  // Auto-link users to already-onboarded orgs they belong to on GitHub.
+  // This removes extra manual "join" steps for users entering shared workspaces.
+  if (providerToken && !githubError) {
+    const onboardedToJoin = githubOrgs.filter((org) => org.status === "onboarded");
+    if (onboardedToJoin.length > 0) {
+      await Promise.all(
+        onboardedToJoin.map(async (org) => {
+          try {
+            await backendFetch<{ organization_id: string }>(
+              `/github/orgs/${encodeURIComponent(org.github_login)}/join`,
+              token,
+              {
+                method: "POST",
+                headers: { "X-GitHub-Token": providerToken },
+              }
+            );
+          } catch (e) {
+            if (isUnauthorizedBackendError(e)) {
+              redirect("/?login=1&error=session_expired");
+            }
+          }
+        })
+      );
+
+      try {
+        const [orgsRefetch, ghRefetch] = await Promise.all([
+          backendFetch<{ organizations: { id: string; name: string }[] }>("/orgs", token),
+          backendFetch<{ github_orgs: GithubOrgRow[] }>("/github/orgs", token, {
+            headers: { "X-GitHub-Token": providerToken },
+          }),
+        ]);
+        orgs = orgsRefetch.organizations || [];
+        githubOrgs = ghRefetch.github_orgs || githubOrgs;
+      } catch (e: any) {
+        if (isUnauthorizedBackendError(e)) {
+          redirect("/?login=1&error=session_expired");
+        }
+      }
+    }
+  }
+
   const hasOrg = orgs.length > 0;
 
   // Fetch installations for each org to check if they have GitHub connected
@@ -114,21 +169,10 @@ async function DashboardContent() {
     })
   );
 
-  const providerToken = (session as any)?.provider_token as string | undefined;
-  let githubOrgs: GithubOrgRow[] = [];
-  let githubError: string | null = null;
-  if (providerToken) {
-    try {
-      const ghResp = await backendFetch<{ github_orgs: GithubOrgRow[] }>("/github/orgs", token, {
-        headers: { "X-GitHub-Token": providerToken },
-      });
-      githubOrgs = ghResp.github_orgs || [];
-    } catch (e: any) {
-      githubError = e?.message || "Failed to fetch GitHub organizations.";
-    }
-  }
-
-  const hasAnyInstallations = orgsWithInstallations.some((org) => org.hasInstallations);
+  const connectedGithubOrgs = githubOrgs.filter((org) => org.status === "connected" && org.archtruth_org_id);
+  const onboardedGithubOrgs = githubOrgs.filter((org) => org.status === "onboarded");
+  const notConnectedGithubOrgs = githubOrgs.filter((org) => org.status === "not_connected");
+  const isFirstTimeUser = !hasOrg;
 
   return (
     <div className="space-y-6">
@@ -138,16 +182,114 @@ async function DashboardContent() {
           <p className="text-mutedForeground">Manage organizations and GitHub installations.</p>
         </div>
         <div className="flex gap-2">
-          {!hasAnyInstallations && hasOrg && (
-            <Link href="/dashboard/connect-github">
-              <Button>Connect GitHub</Button>
-            </Link>
-          )}
+          <Link href="/dashboard/connect-github">
+            <Button>Connect GitHub</Button>
+          </Link>
           <Link href="/dashboard/repos">
             <Button variant="outline">View repos</Button>
           </Link>
         </div>
       </div>
+
+      <Card>
+        <CardHeader>
+          <CardTitle>{isFirstTimeUser ? "Get started in 3 quick steps" : "Onboarding shortcuts"}</CardTitle>
+          <CardDescription>
+            {isFirstTimeUser
+              ? "We auto-detect onboarded orgs you belong to and show docs instantly. Connect new orgs in one click."
+              : "Quick actions for your existing workspaces and connecting additional orgs."}
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="rounded-md border border-border p-3">
+            <div className="mb-1 text-sm font-medium">1) Existing onboarded orgs are auto-available</div>
+            <p className="mb-3 text-xs text-mutedForeground">
+              If someone in your GitHub org already generated docs, they appear here automatically after login.
+            </p>
+            {onboardedGithubOrgs.length === 0 ? (
+              <p className="text-sm text-mutedForeground">All available onboarded orgs are already synced to your account.</p>
+            ) : (
+              <div className="space-y-2">
+                {onboardedGithubOrgs.map((org) => (
+                  <div key={org.github_login} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border p-2">
+                    <div className="text-sm">
+                      <span className="font-medium">{org.github_login}</span>
+                      {org.archtruth_org_name ? (
+                        <span className="text-mutedForeground"> · {org.archtruth_org_name}</span>
+                      ) : null}
+                    </div>
+                    <Badge variant="secondary">Syncing access...</Badge>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-md border border-border p-3">
+            <div className="mb-1 text-sm font-medium">2) Connect a new GitHub org</div>
+            <p className="mb-3 text-xs text-mutedForeground">
+              Create a workspace for any org you belong to (personal org or team org) and install the GitHub App.
+            </p>
+            {notConnectedGithubOrgs.length === 0 ? (
+              <p className="text-sm text-mutedForeground">All detected orgs are already connected or onboarded.</p>
+            ) : (
+              <div className="space-y-2">
+                {notConnectedGithubOrgs.map((org) => (
+                  <div key={org.github_login} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border p-2">
+                    <div className="text-sm font-medium">{org.github_login}</div>
+                    <form action={createWorkspaceAndInstall}>
+                      <input type="hidden" name="org_login" value={org.github_login} />
+                      <Button size="sm" variant="outline">
+                        Connect this org
+                      </Button>
+                    </form>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div className="mt-3">
+              <Link href="/dashboard/connect-github">
+                <Button size="sm" variant="ghost">
+                  Open full GitHub connect page
+                </Button>
+              </Link>
+            </div>
+          </div>
+
+          <div className="rounded-md border border-border p-3">
+            <div className="mb-1 text-sm font-medium">3) Open existing documentation</div>
+            <p className="mb-3 text-xs text-mutedForeground">
+              If docs are already generated for an org, open them directly.
+            </p>
+            {connectedGithubOrgs.length === 0 ? (
+              <p className="text-sm text-mutedForeground">No connected org docs found yet. Connect a repo to generate docs.</p>
+            ) : (
+              <div className="space-y-2">
+                {connectedGithubOrgs.map((org) => (
+                  <div key={org.github_login} className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-border p-2">
+                    <div className="text-sm">
+                      <span className="font-medium">{org.github_login}</span>
+                      {org.archtruth_org_name ? (
+                        <span className="text-mutedForeground"> · {org.archtruth_org_name}</span>
+                      ) : null}
+                    </div>
+                    <div className="flex gap-2">
+                      <Link href={`/dashboard/orgs/${encodeURIComponent(org.archtruth_org_id!)}/docs`}>
+                        <Button size="sm" variant="outline">
+                          View docs
+                        </Button>
+                      </Link>
+                      <Link href={`/dashboard/repos?org_id=${encodeURIComponent(org.archtruth_org_id!)}`}>
+                        <Button size="sm">View repos</Button>
+                      </Link>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>
@@ -199,24 +341,29 @@ async function DashboardContent() {
 
                     <div className="flex flex-wrap gap-2">
                       {status === "connected" && org.archtruth_org_id ? (
-                        <Link href={`/dashboard/repos?org_id=${encodeURIComponent(org.archtruth_org_id)}`}>
-                          <Button size="sm">Open</Button>
-                        </Link>
+                        <>
+                          <Link href={`/dashboard/orgs/${encodeURIComponent(org.archtruth_org_id)}/docs`}>
+                            <Button size="sm" variant="outline">
+                              Docs
+                            </Button>
+                          </Link>
+                          <Link href={`/dashboard/repos?org_id=${encodeURIComponent(org.archtruth_org_id)}`}>
+                            <Button size="sm">Open</Button>
+                          </Link>
+                        </>
                       ) : null}
 
                       {status === "onboarded" ? (
-                        <form action={joinGithubOrg}>
-                          <input type="hidden" name="org_login" value={org.github_login} />
-                          <Button size="sm">Join</Button>
-                        </form>
+                        <Badge variant="secondary">Auto-syncing</Badge>
                       ) : null}
 
                       {status === "not_connected" ? (
-                        <Link href="/dashboard/connect-github">
+                        <form action={createWorkspaceAndInstall}>
+                          <input type="hidden" name="org_login" value={org.github_login} />
                           <Button size="sm" variant="outline">
                             Connect
                           </Button>
-                        </Link>
+                        </form>
                       ) : null}
                     </div>
                   </div>

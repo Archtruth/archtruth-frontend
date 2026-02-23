@@ -107,6 +107,25 @@ async function ReposContent({ searchParams }: Props) {
         orgId={selectedOrgId}
         token={token}
       />
+
+      {installations.length === 0 ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Need help getting started?</CardTitle>
+            <CardDescription>
+              You can connect another GitHub org or open existing org docs if this workspace was already onboarded.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-wrap gap-2">
+            <Link href="/dashboard/connect-github">
+              <Button>Connect GitHub org</Button>
+            </Link>
+            <Link href={`/dashboard/orgs/${encodeURIComponent(selectedOrgId)}/docs`}>
+              <Button variant="outline">View org docs</Button>
+            </Link>
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

@@ -21,42 +21,6 @@ type GithubOrgRow = {
   user_is_member?: boolean | null;
 };
 
-async function joinGithubOrg(formData: FormData) {
-  "use server";
-  const orgLogin = String(formData.get("org_login") || "").trim();
-  if (!orgLogin) {
-    throw new Error("org_login is required");
-  }
-
-  const session = await getServerSession();
-  const token = session?.access_token;
-  const providerToken = (session as any)?.provider_token as string | undefined;
-  if (!token || !providerToken) {
-    redirect("/?login=1&error=session_expired");
-  }
-
-  let resp: { organization_id: string };
-  try {
-    resp = await backendFetch<{ organization_id: string }>(
-      `/github/orgs/${encodeURIComponent(orgLogin)}/join`,
-      token,
-      {
-        method: "POST",
-        headers: {
-          "X-GitHub-Token": providerToken,
-        },
-      }
-    );
-  } catch (e) {
-    if (isUnauthorizedBackendError(e)) {
-      redirect("/?login=1&error=session_expired");
-    }
-    throw e;
-  }
-
-  redirect(`/dashboard/repos?org_id=${encodeURIComponent(resp.organization_id)}`);
-}
-
 async function createWorkspaceAndInstall(formData: FormData) {
   "use server";
   const orgLogin = String(formData.get("org_login") || "").trim();
@@ -123,6 +87,42 @@ async function ConnectGithubContent({ searchParams }: { searchParams: Record<str
     }
   }
 
+  // Auto-link already-onboarded organizations for this user.
+  if (providerToken && !githubError) {
+    const onboardedToJoin = githubOrgs.filter((org) => org.status === "onboarded");
+    if (onboardedToJoin.length > 0) {
+      await Promise.all(
+        onboardedToJoin.map(async (org) => {
+          try {
+            await backendFetch<{ organization_id: string }>(
+              `/github/orgs/${encodeURIComponent(org.github_login)}/join`,
+              token,
+              {
+                method: "POST",
+                headers: { "X-GitHub-Token": providerToken },
+              }
+            );
+          } catch (e) {
+            if (isUnauthorizedBackendError(e)) {
+              redirect("/?login=1&error=session_expired");
+            }
+          }
+        })
+      );
+
+      try {
+        const ghRefetch = await backendFetch<{ github_orgs: GithubOrgRow[] }>("/github/orgs", token, {
+          headers: { "X-GitHub-Token": providerToken },
+        });
+        githubOrgs = ghRefetch.github_orgs || githubOrgs;
+      } catch (e) {
+        if (isUnauthorizedBackendError(e)) {
+          redirect("/?login=1&error=session_expired");
+        }
+      }
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -141,8 +141,7 @@ async function ConnectGithubContent({ searchParams }: { searchParams: Record<str
         <CardHeader>
           <CardTitle>Your GitHub organizations</CardTitle>
           <CardDescription>
-            If an org is already onboarded by someone else, you can join it here. Otherwise, create a workspace and install
-            the GitHub App.
+            Onboarded orgs you belong to are auto-available. For new orgs, create a workspace and install the GitHub App.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
@@ -203,12 +202,7 @@ async function ConnectGithubContent({ searchParams }: { searchParams: Record<str
                         </Link>
                       ) : null}
 
-                      {status === "onboarded" ? (
-                        <form action={joinGithubOrg}>
-                          <input type="hidden" name="org_login" value={org.github_login} />
-                          <Button size="sm">Join</Button>
-                        </form>
-                      ) : null}
+                      {status === "onboarded" ? <Badge variant="secondary">Auto-syncing</Badge> : null}
 
                       {status === "not_connected" ? (
                         <form action={createWorkspaceAndInstall}>
