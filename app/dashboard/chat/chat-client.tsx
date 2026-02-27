@@ -143,31 +143,22 @@ export function ChatClient({
               );
             } else if (obj.event === "chunk") {
               currentText += obj.text;
-               setMessages((prev) => 
-                prev.map(m => m.id === botMsgId ? { ...m, content: currentText } : m)
+              setMessages((prev) =>
+                prev.map(m => m.id === botMsgId
+                  ? { ...m, content: currentText, currentStatus: undefined, statusMessages: undefined }
+                  : m)
               );
             } else if (obj.event === "status") {
-              let message = obj.message || obj.phase || "Working...";
+              const phase = obj.phase || "";
+              let message = obj.message || "Working...";
 
-              // Make status messages more user-friendly
-              if (message.includes("Setting up research strategy")) {
-                message = "Analyzing your complex question and planning research approach...";
-              } else if (message.includes("Gathering initial evidence")) {
-                message = "Collecting relevant information from documentation and code...";
-              } else if (message.includes("Found relevant information")) {
-                message = "Analyzing gathered information and building understanding...";
-              } else if (message.includes("Starting research")) {
-                message = "Beginning detailed research and investigation...";
-              } else if (message.includes("Gathering more details")) {
-                message = "Finding additional details and connections...";
-              } else if (message.includes("Refining analysis")) {
-                message = "Refining the analysis with deeper investigation...";
-              } else if (message.includes("Time budget reached")) {
-                message = "Completing comprehensive analysis with findings...";
-              } else if (message.includes("Providing comprehensive partial analysis")) {
-                message = "Finalizing detailed findings and next steps...";
-              } else if (message.includes("synthesis")) {
-                message = "Synthesizing comprehensive answer from all evidence...";
+              // Normalise status messages to a small set of user-friendly strings
+              if (phase === "search" || message.toLowerCase().includes("search")) {
+                message = "Searching documentation and code...";
+              } else if (phase === "generating" || message.toLowerCase().includes("generat")) {
+                message = "Generating answer...";
+              } else if (phase === "embedding") {
+                message = "Processing your question...";
               }
 
               setMessages((prev) =>
@@ -175,9 +166,8 @@ export function ChatClient({
                   ? (() => {
                       const prevLog = m.statusMessages || [];
                       const msg = String(message);
-                      // De-dupe consecutive duplicates and cap log size for a cleaner UI.
                       const last = prevLog.length > 0 ? prevLog[prevLog.length - 1] : null;
-                      const nextLog = last === msg ? prevLog : [...prevLog, msg].slice(-15); // Reduced from 20 to 15
+                      const nextLog = last === msg ? prevLog : [...prevLog, msg].slice(-5);
                       return { ...m, currentStatus: msg, statusMessages: nextLog };
                     })()
                   : m)
@@ -521,10 +511,10 @@ export function ChatClient({
                  </Avatar>
                  <div className="bg-muted text-foreground rounded-lg px-4 py-2 text-sm shadow-sm flex items-center">
                     <Loader2 className="h-4 w-4 animate-spin mr-2" />
-                    {streamingStartTime && Date.now() - streamingStartTime > 10000
-                      ? "Taking a bit longer... Analyzing your complex query"
-                      : streamingStartTime && Date.now() - streamingStartTime > 5000
-                      ? "Searching documentation and code..."
+                    {streamingStartTime && Date.now() - streamingStartTime > 8000
+                      ? "Almost there..."
+                      : streamingStartTime && Date.now() - streamingStartTime > 3000
+                      ? "Searching code and docs..."
                       : "Thinking..."}
                  </div>
              </div>
