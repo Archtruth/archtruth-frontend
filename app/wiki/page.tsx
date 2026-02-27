@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getServerSession } from "@/lib/supabase/server";
-import { isUnauthorizedBackendError, listOrgRepositories, listOrgDocuments, listWikiPages } from "@/lib/api/backend";
+import { listOrgRepositories, listOrgDocuments, listWikiPages } from "@/lib/api/backend";
 import { OrgWikiClient } from "./org-client";
 
 type PageProps = {
@@ -23,13 +23,16 @@ export default async function OrgWikiPage({ searchParams }: PageProps) {
   let repos: { id: number; full_name: string; pages: { id: number; slug: string; title: string; category?: string; nav_order?: number; updated_at?: string; last_indexed_commit_sha?: string; indexed_at?: string }[] }[] = [];
 
   try {
-    const [orgDocsResp, reposResp] = await Promise.all([
-      listOrgDocuments(orgId, token),
-      listOrgRepositories(orgId, token),
-    ]);
+    const orgDocsResp = await listOrgDocuments(orgId, token);
     orgDocs = orgDocsResp.documents || [];
-    const repoList = reposResp.repositories || [];
+  } catch (e) {
+    // Non-fatal for org wiki shell rendering.
+    console.error("Failed to load org docs for org wiki", e);
+  }
 
+  try {
+    const reposResp = await listOrgRepositories(orgId, token);
+    const repoList = reposResp.repositories || [];
     const pagesByRepo = await Promise.all(
       repoList.map(async (repo) => {
         try {
@@ -48,10 +51,8 @@ export default async function OrgWikiPage({ searchParams }: PageProps) {
     );
     repos = pagesByRepo.filter((r) => r.pages.length > 0);
   } catch (e) {
-    if (isUnauthorizedBackendError(e)) {
-      redirect("/?login=1&error=session_expired");
-    }
-    throw e;
+    // Non-fatal for org wiki shell rendering.
+    console.error("Failed to load org repositories for org wiki", e);
   }
 
   const backHref = `/dashboard/repos?org_id=${encodeURIComponent(orgId)}`;

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { presignWikiPage, presignOrgDocument } from "@/lib/api/backend-client";
+import { presignWikiPage, presignOrgDocument } from "@/lib/api/backend";
 import { Button } from "@/components/ui/button";
 import { FileText, ChevronLeft, Calendar, Loader, BookOpen, Search, ChevronRight, ChevronDown, Folder, FolderOpen, ExternalLink, Code } from "lucide-react";
 import ReactMarkdown from "react-markdown";

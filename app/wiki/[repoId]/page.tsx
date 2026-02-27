@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { getServerSession } from "@/lib/supabase/server";
-import { isUnauthorizedBackendError, listWikiPages, listOrgDocuments } from "@/lib/api/backend";
+import { listWikiPages, listOrgDocuments } from "@/lib/api/backend";
 import { FullScreenWikiClient } from "./client";
 
 type PageProps = {
@@ -17,14 +17,13 @@ export default async function FullScreenWikiPage({ params, searchParams }: PageP
   const repoId = Number(params.repoId);
   const orgId = searchParams?.org_id;
 
-  let pagesResp: Awaited<ReturnType<typeof listWikiPages>>;
+  let pagesResp: Awaited<ReturnType<typeof listWikiPages>> = { pages: [] };
   try {
     pagesResp = await listWikiPages(repoId, token);
   } catch (e) {
-    if (isUnauthorizedBackendError(e)) {
-      redirect("/?login=1&error=session_expired");
-    }
-    throw e;
+    // Do not force logout for repo wiki fetch failures; render empty wiki state instead.
+    // This avoids treating "docs not ready yet" as a session-expired flow.
+    console.error("Failed to load wiki pages for repo", repoId, e);
   }
 
   let orgDocs: Awaited<ReturnType<typeof listOrgDocuments>>["documents"] = [];
