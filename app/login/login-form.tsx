@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/button";
 
 type LoginFormProps = {
@@ -10,35 +9,24 @@ type LoginFormProps = {
 };
 
 export function LoginForm({ variant = "page", error }: LoginFormProps) {
-  const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000";
   const [isSigningIn, setIsSigningIn] = React.useState(false);
-  const [clientError, setClientError] = React.useState<string | null>(null);
 
-  async function handleSignIn() {
+  function handleSignIn() {
     if (isSigningIn) return;
-    setClientError(null);
     setIsSigningIn(true);
-    const supabase = getSupabaseBrowserClient();
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider: "github",
-      options: {
-        redirectTo: `${siteUrl}/auth/callback`,
-        // Needed to reliably list orgs the user belongs to (including private org membership)
-        scopes: "read:org",
-      },
-    });
-    if (error) {
-      console.error("Sign-in error:", error.message);
-      setClientError(error.message);
-      setIsSigningIn(false);
-    }
+    // Navigate to the server-side OAuth initiation route.
+    // This stores the PKCE code_verifier via a reliable Set-Cookie header
+    // rather than the browser client's setItemAsync(), which has a known
+    // intermittent bug where it silently fails to persist the cookie.
+    // See: https://github.com/supabase/ssr/issues/55
+    window.location.href = "/auth/login";
   }
 
   const content = (
     <div className="w-full max-w-md space-y-4">
-      {error || clientError ? (
+      {error ? (
         <div className="rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
-          {error || clientError}
+          {error}
         </div>
       ) : null}
       <Button className="w-full" type="button" onClick={handleSignIn} loading={isSigningIn}>

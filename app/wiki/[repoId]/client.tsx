@@ -215,8 +215,9 @@ export function FullScreenWikiClient({
 
   // Keep expanded state in sync when selecting a module
   useEffect(() => {
-    if (selectedService && !expandedServices.has(selectedService)) {
+    if (selectedService) {
       setExpandedServices((prev) => {
+        if (prev.has(selectedService)) return prev;
         const next = new Set(prev);
         next.add(selectedService);
         try {

@@ -162,8 +162,9 @@ export function OrgWikiClient({
   }, [orgDocs, repos, searchParams]);
 
   useEffect(() => {
-    if (selectedRepoId && !expandedRepos.has(selectedRepoId)) {
+    if (selectedRepoId) {
       setExpandedRepos((prev) => {
+        if (prev.has(selectedRepoId!)) return prev;
         const next = new Set(prev);
         next.add(selectedRepoId!);
         try {
@@ -404,7 +405,7 @@ export function OrgWikiClient({
         );
       },
     }),
-    [allPages, handleSelectModule]
+    [allPages, handleSelectModule, repos]
   );
 
   return (
