@@ -9,6 +9,7 @@ import {
   cancelIngestionJob as cancelIngestionJobBase,
   listDocuments as listDocumentsBase,
   presignDocument as presignDocumentBase,
+  listOrgRepositories as listOrgRepositoriesBase,
   listOrgDocuments as listOrgDocumentsBase,
   presignOrgDocument as presignOrgDocumentBase,
   listWikiPages as listWikiPagesBase,
@@ -67,6 +68,10 @@ export function listDocuments(repoId: number, token: string) {
 
 export function presignDocument(docId: number, token: string) {
   return withAuthRedirect(() => presignDocumentBase(docId, token));
+}
+
+export function listOrgRepositories(orgId: string, token: string) {
+  return withAuthRedirect(() => listOrgRepositoriesBase(orgId, token));
 }
 
 export function listOrgDocuments(orgId: string, token: string) {

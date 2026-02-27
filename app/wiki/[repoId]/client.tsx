@@ -5,7 +5,7 @@ import { useEffect, useMemo, useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { presignWikiPage, presignOrgDocument } from "@/lib/api/backend-client";
 import { Button } from "@/components/ui/button";
-import { FileText, ChevronLeft, Calendar, Loader, BookOpen, Search, ChevronRight, Folder, FolderOpen, ExternalLink, Code } from "lucide-react";
+import { FileText, ChevronLeft, Calendar, Loader, BookOpen, Search, ChevronRight, ChevronDown, Folder, FolderOpen, ExternalLink, Code } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
@@ -39,6 +39,18 @@ type Service = {
   name: string;
   modules: WikiPage[];
 };
+
+const ORG_DOC_DISPLAY_NAMES: Record<string, string> = {
+  org_overview: "Overview",
+  org_architecture: "Architecture",
+  org_services: "Service Catalog",
+  org_interfaces: "Interfaces",
+};
+
+function getOrgDocDisplayName(filePath: string): string {
+  const key = filePath.replace(/\.(md|mdx)$/i, "");
+  return ORG_DOC_DISPLAY_NAMES[key] ?? filePath.replace(/\.(md|mdx)$/i, "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 async function fetchWikiContent(repoId: number, slug: string, token: string): Promise<string> {
   const presigned = await presignWikiPage(repoId, slug, token);
@@ -85,27 +97,59 @@ export function FullScreenWikiClient({
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [services, setServices] = useState<Service[]>([]);
+  const [expandedServices, setExpandedServices] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const stored = sessionStorage.getItem("wiki-expanded-services");
+      if (stored) {
+        const arr = JSON.parse(stored) as string[];
+        return new Set(arr);
+      }
+    } catch {
+      /* ignore */
+    }
+    return new Set();
+  });
+
+  const toggleServiceExpanded = useCallback((serviceName: string) => {
+    setExpandedServices((prev) => {
+      const next = new Set(prev);
+      if (next.has(serviceName)) {
+        next.delete(serviceName);
+      } else {
+        next.add(serviceName);
+      }
+      try {
+        sessionStorage.setItem("wiki-expanded-services", JSON.stringify([...next]));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
 
   const initializeFromWikiPages = useCallback(() => {
     const serviceMap = new Map<string, WikiPage[]>();
     const normalizeSlug = (slug: string) => slug.replace(/\.(md|mdx)$/i, "");
+    const SYNTHETIC_PREFIXES = ["modules", "api", "architecture", "configuration", "guides", "generated", "general"];
 
     pages.forEach((page) => {
       const normalized = normalizeSlug(page.slug);
       const parts = normalized.split("/").filter(Boolean);
-      // Drive grouping from real wiki slugs so sidebar nodes always map to actual pages.
-      // This avoids synthetic slugs from org_services parsing that produce empty folders.
-      const serviceName =
-        parts.length > 1
-          ? parts[0]
-          : (page.category && page.category.trim().length > 0 ? page.category : "overview");
+      let serviceName: string;
+      if (parts.length > 1 && SYNTHETIC_PREFIXES.includes(parts[0].toLowerCase())) {
+        serviceName = parts[1];
+      } else if (parts.length > 1) {
+        serviceName = parts[0];
+      } else {
+        serviceName = page.category && page.category.trim().length > 0 ? page.category : "overview";
+      }
       if (!serviceMap.has(serviceName)) {
         serviceMap.set(serviceName, []);
       }
       serviceMap.get(serviceName)!.push(page);
     });
 
-    // Convert to array and sort
     const servicesArray: Service[] = Array.from(serviceMap.entries())
       .map(([name, modules]) => ({
         name,
@@ -168,6 +212,22 @@ export function FullScreenWikiClient({
       setSelectedOrgDoc(orgDocs[0].file_path);
     }
   }, [orgDocs, services, searchParams]);
+
+  // Keep expanded state in sync when selecting a module
+  useEffect(() => {
+    if (selectedService && !expandedServices.has(selectedService)) {
+      setExpandedServices((prev) => {
+        const next = new Set(prev);
+        next.add(selectedService);
+        try {
+          sessionStorage.setItem("wiki-expanded-services", JSON.stringify([...next]));
+        } catch {
+          /* ignore */
+        }
+        return next;
+      });
+    }
+  }, [selectedService]);
 
   // Load content when selection changes
   useEffect(() => {
@@ -239,15 +299,29 @@ export function FullScreenWikiClient({
 
   const filteredPages = useMemo(() => {
     if (!searchQuery) return [];
-    const q = searchQuery.toLowerCase();
-    const results: Array<{ type: "org-doc" | "module"; title: string; subtitle: string; action: () => void }> = [];
+    const q = searchQuery.toLowerCase().trim();
+    const words = q.split(/\s+/).filter(Boolean);
+    const results: Array<{ type: "org-doc" | "module"; title: string; subtitle: string; preview?: string; score: number; action: () => void }> = [];
+
+    const scoreMatch = (text: string): number => {
+      const lower = text.toLowerCase();
+      if (lower === q) return 100;
+      if (lower.startsWith(q)) return 80;
+      if (lower.includes(q)) return 60;
+      if (words.every((w) => lower.includes(w))) return 40;
+      if (words.some((w) => lower.includes(w))) return 20;
+      return 0;
+    };
 
     orgDocs.forEach((doc) => {
-      if (doc.file_path.toLowerCase().includes(q)) {
+      const displayName = getOrgDocDisplayName(doc.file_path);
+      const score = Math.max(scoreMatch(doc.file_path), scoreMatch(displayName));
+      if (score > 0) {
         results.push({
           type: "org-doc",
-          title: doc.file_path,
-          subtitle: "Org Document",
+          title: displayName,
+          subtitle: "Getting Started",
+          score,
           action: () => handleSelectOrgDoc(doc.file_path),
         });
       }
@@ -255,22 +329,27 @@ export function FullScreenWikiClient({
 
     services.forEach((service) => {
       service.modules.forEach((module) => {
-        if (
-          module.title.toLowerCase().includes(q) ||
-          module.slug.toLowerCase().includes(q) ||
-          service.name.toLowerCase().includes(q)
-        ) {
+        const score = Math.max(
+          scoreMatch(module.title),
+          scoreMatch(module.slug),
+          scoreMatch(service.name),
+          scoreMatch(module.category ?? "")
+        );
+        if (score > 0) {
           results.push({
             type: "module",
             title: module.title,
             subtitle: `${service.name} / ${module.slug}`,
+            preview: module.category ? `Category: ${module.category}` : undefined,
+            score,
             action: () => handleSelectModule(service.name, module.slug),
           });
         }
       });
     });
 
-    return results.slice(0, 10);
+    results.sort((a, b) => b.score - a.score);
+    return results.slice(0, 15);
   }, [searchQuery, orgDocs, services, handleSelectOrgDoc, handleSelectModule]);
 
   return (
@@ -317,14 +396,17 @@ export function FullScreenWikiClient({
                         {filteredPages.map((item, idx) => (
                           <button
                             key={idx}
-                            className="w-full text-left px-3 py-2 text-sm hover:bg-muted rounded-sm flex flex-col gap-0.5"
+                            className="w-full text-left px-3 py-2.5 text-sm hover:bg-muted rounded-sm flex flex-col gap-0.5"
                             onClick={() => {
                               item.action();
                               setSearchOpen(false);
                             }}
                           >
-                            <span className="font-medium">{item.title}</span>
+                            <span className="font-medium truncate">{item.title}</span>
                             <span className="text-xs text-muted-foreground truncate">{item.subtitle}</span>
+                            {item.preview && (
+                              <span className="text-[10px] text-muted-foreground/80 truncate">{item.preview}</span>
+                            )}
                           </button>
                         ))}
                       </div>
@@ -343,34 +425,45 @@ export function FullScreenWikiClient({
         {/* Left Sidebar - Services */}
         <aside className="w-72 border-r bg-background/95 overflow-y-auto">
           <div className="p-4 space-y-4">
-            {/* Metadata Section */}
-            {(selectedPage || selectedDoc) && (
-              <div className="px-2 py-2 border-b border-border/60 mb-2">
-                <p className="text-xs text-muted-foreground">
-                  {selectedPage?.updated_at && (
-                    <>
-                      Last indexed: {new Date(selectedPage.updated_at).toLocaleDateString()}
-                      {selectedPage.last_indexed_commit_sha && (
-                        <span className="ml-1 font-mono text-[10px]">
-                          ({selectedPage.last_indexed_commit_sha.substring(0, 6)})
-                        </span>
-                      )}
-                    </>
+            {/* Metadata Section - Version & Staleness */}
+            {(selectedPage || selectedDoc) && (() => {
+              const updatedAt = selectedPage?.updated_at || selectedDoc?.updated_at;
+              const commitSha = selectedPage?.last_indexed_commit_sha;
+              if (!updatedAt) return null;
+              const date = new Date(updatedAt);
+              const now = new Date();
+              const daysSince = (now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24);
+              const staleness = daysSince <= 1 ? "fresh" : daysSince <= 7 ? "recent" : "stale";
+              const stalenessColors = {
+                fresh: "text-emerald-600 dark:text-emerald-400",
+                recent: "text-amber-600 dark:text-amber-400",
+                stale: "text-red-600 dark:text-red-400",
+              };
+              return (
+                <div className="px-2 py-2 border-b border-border/60 mb-2 space-y-1">
+                  <p className="text-xs text-muted-foreground">
+                    Last indexed: {date.toLocaleDateString()}
+                  </p>
+                  {commitSha && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider">Version</span>
+                      <code className={cn("text-[11px] font-mono px-1.5 py-0.5 rounded", stalenessColors[staleness])}>
+                        {commitSha.substring(0, 7)}
+                      </code>
+                    </div>
                   )}
-                  {selectedDoc?.updated_at && (
-                    <>
-                      Last indexed: {new Date(selectedDoc.updated_at).toLocaleDateString()}
-                    </>
-                  )}
-                </p>
-              </div>
-            )}
+                  <p className={cn("text-[10px] font-medium", stalenessColors[staleness])}>
+                    {staleness === "fresh" ? "Up to date" : staleness === "recent" ? "Consider re-syncing" : "Stale — re-sync recommended"}
+                  </p>
+                </div>
+              );
+            })()}
 
-            {/* Org Docs Section */}
+            {/* Getting Started - Org Docs */}
             {orgDocs.length > 0 && (
               <div className="space-y-2">
                 <div className="px-2 py-1">
-                  <h2 className="text-sm font-semibold text-foreground">Org Docs</h2>
+                  <h2 className="text-sm font-semibold text-foreground">Getting Started</h2>
                 </div>
                 <div className="space-y-1">
                   {orgDocs.map((doc) => {
@@ -388,7 +481,7 @@ export function FullScreenWikiClient({
                       >
                         <div className="flex items-center gap-2">
                           <FileText className="h-4 w-4 flex-shrink-0" />
-                          <span className="truncate font-mono text-xs">{doc.file_path}</span>
+                          <span className="truncate">{getOrgDocDisplayName(doc.file_path)}</span>
                         </div>
                       </button>
                     );
@@ -407,6 +500,7 @@ export function FullScreenWikiClient({
                   {services.map((service) => {
                     const isServiceSelected = selectedService === service.name;
                     const hasModules = service.modules.length > 0;
+                    const isExpanded = expandedServices.has(service.name);
 
                     return (
                       <div key={service.name} className="space-y-1">
@@ -423,17 +517,35 @@ export function FullScreenWikiClient({
                             }
                           }}
                         >
+                          <button
+                            type="button"
+                            data-expand-toggle
+                            className="p-0.5 -m-0.5 rounded hover:bg-muted/80 flex-shrink-0"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (hasModules) toggleServiceExpanded(service.name);
+                            }}
+                            aria-label={isExpanded ? "Collapse" : "Expand"}
+                          >
+                            {hasModules ? (
+                              isExpanded ? (
+                                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                              ) : (
+                                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                              )
+                            ) : null}
+                          </button>
                           {isServiceSelected ? (
                             <FolderOpen className="h-4 w-4 text-primary flex-shrink-0" />
                           ) : (
                             <Folder className="h-4 w-4 text-muted-foreground flex-shrink-0" />
                           )}
                           <span className="flex-1 truncate font-medium">{service.name}</span>
-                          <span className="text-xs text-muted-foreground">{service.modules.length}</span>
+                          <span className="text-xs text-muted-foreground tabular-nums">[{service.modules.length}]</span>
                         </div>
 
-                        {/* Modules under service */}
-                        {isServiceSelected && hasModules && (
+                        {/* Modules under service - show when expanded */}
+                        {isExpanded && hasModules && (
                           <div className="ml-6 space-y-1 border-l border-border/60 pl-2">
                             {service.modules.map((module) => {
                               const isModuleSelected = selectedModule === module.slug;
@@ -481,8 +593,8 @@ export function FullScreenWikiClient({
                 <div className="rounded-xl border bg-card/80 backdrop-blur shadow-sm p-6">
                   <div className="flex flex-wrap items-center justify-between gap-4">
                     <div>
-                      <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">Org Document</p>
-                      <h1 className="text-3xl font-bold leading-tight font-mono text-sm">{selectedDoc.file_path}</h1>
+                      <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">Getting Started</p>
+                      <h1 className="text-3xl font-bold leading-tight">{getOrgDocDisplayName(selectedDoc.file_path)}</h1>
                     </div>
                   </div>
                   {selectedDoc.updated_at && (
@@ -654,20 +766,35 @@ export function FullScreenWikiClient({
                         },
                         a: ({ href, children, ...props }) => {
                           const h = href || "";
-                          // Wiki internal links
                           if (h.startsWith("wiki:")) {
                             const target = h.slice("wiki:".length);
-                            const modulePage = pages.find((p) => p.slug === target);
+                            const withRepo = target.includes("/");
+                            const [repoPart, slugPart] = withRepo ? target.split("/") : [null, target];
+                            const slug = slugPart ?? target;
+                            if (repoPart) {
+                              const otherRepoId = parseInt(repoPart, 10);
+                              if (!isNaN(otherRepoId) && otherRepoId !== repoId && orgId) {
+                                return (
+                                  <Link
+                                    href={`/wiki?org_id=${encodeURIComponent(orgId)}&repo=${otherRepoId}&module=${encodeURIComponent(slug)}`}
+                                    className="text-primary underline underline-offset-4 hover:opacity-90"
+                                  >
+                                    {children}
+                                  </Link>
+                                );
+                              }
+                            }
+                            const modulePage = pages.find((p) => p.slug === slug);
                             if (modulePage) {
                               const service = services.find((s) =>
-                                s.modules.some((m) => m.slug === target)
+                                s.modules.some((m) => m.slug === slug)
                               );
                               if (service) {
                                 return (
                                   <button
                                     type="button"
                                     className="text-primary underline underline-offset-4 hover:opacity-90"
-                                    onClick={() => handleSelectModule(service.name, target)}
+                                    onClick={() => handleSelectModule(service.name, slug)}
                                   >
                                     {children}
                                   </button>

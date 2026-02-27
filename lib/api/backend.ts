@@ -157,6 +157,12 @@ export async function presignDocument(docId: number, token: string) {
   return backendFetch<{ url: string }>(`/documents/${docId}/presigned`, token);
 }
 
+export async function listOrgRepositories(orgId: string, token: string) {
+  return backendFetch<{
+    repositories: { id: number; full_name: string; default_branch?: string }[];
+  }>(`/orgs/${orgId}/repositories`, token);
+}
+
 export async function listOrgDocuments(orgId: string, token: string) {
   return backendFetch<{
     documents: {

@@ -45,6 +45,7 @@ const baseNavItems: NavItem[] = [
   { label: "Overview", href: "/dashboard", icon: <Home className="h-4 w-4" /> },
   { label: "Connect GitHub", href: "/dashboard/connect-github", icon: <Plus className="h-4 w-4" /> },
   { label: "Repositories", href: "/dashboard/repos", icon: <Layers className="h-4 w-4" /> },
+  { label: "Wiki", href: "/wiki", icon: <Book className="h-4 w-4" /> },
   { label: "Org Docs", href: "/dashboard/orgs/docs", icon: <Library className="h-4 w-4" /> },
   { label: "Architecture", href: "/dashboard/orgs/architecture", icon: <Network className="h-4 w-4" /> },
   { label: "Chat", href: "/dashboard/chat", icon: <MessageSquare className="h-4 w-4" /> },
@@ -114,6 +115,9 @@ export function DashboardShell({
     return baseNavItems.map((item) => {
       if (item.href.startsWith("/dashboard/repos") || item.href.startsWith("/dashboard/chat")) {
         return { ...item, href: `${item.href}?org_id=${encodeURIComponent(orgId)}` };
+      }
+      if (item.href === "/wiki") {
+        return { ...item, href: `/wiki?org_id=${encodeURIComponent(orgId)}` };
       }
       if (item.href === "/dashboard/orgs/docs") {
         return { ...item, href: `/dashboard/orgs/${orgId}/docs` };

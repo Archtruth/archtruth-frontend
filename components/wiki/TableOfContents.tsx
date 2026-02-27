@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useRef } from "react";
 import { cn } from "@/lib/utils";
 
 type Heading = {
@@ -8,6 +8,9 @@ type Heading = {
   title: string;
   id: string;
 };
+
+const VISIBLE_INITIAL = 12;
+const SHOW_MORE_STEP = 8;
 
 function generateAnchorId(title: string): string {
   return title
@@ -21,7 +24,6 @@ function generateAnchorId(title: string): string {
 function extractHeadings(markdown: string): Heading[] {
   if (!markdown) return [];
 
-  // Extract markdown content between <MARKDOWN> tags if present
   let content = markdown;
   const mdStart = markdown.indexOf("<MARKDOWN>");
   const mdEnd = markdown.indexOf("</MARKDOWN>");
@@ -35,7 +37,7 @@ function extractHeadings(markdown: string): Heading[] {
   for (const line of lines) {
     const match = line.match(/^(#{2,4})\s+(.+)$/);
     if (match) {
-      const level = match[1].length; // 2, 3, or 4
+      const level = match[1].length;
       const title = match[2].trim();
       const id = generateAnchorId(title);
       headings.push({ level, title, id });
@@ -47,44 +49,51 @@ function extractHeadings(markdown: string): Heading[] {
 
 export function TableOfContents({ markdown }: { markdown: string }) {
   const [activeId, setActiveId] = useState<string>("");
+  const [visibleCount, setVisibleCount] = useState(VISIBLE_INITIAL);
+  const mainRef = useRef<HTMLElement | null>(null);
+
   const headings = useMemo(() => extractHeadings(markdown), [markdown]);
+  const visibleHeadings = headings.slice(0, visibleCount);
+  const hasMore = headings.length > visibleCount;
+
+  useEffect(() => {
+    mainRef.current = document.querySelector("main");
+  }, []);
 
   useEffect(() => {
     if (headings.length === 0) return;
 
-    // Set up intersection observer for active section highlighting
+    const scrollRoot = mainRef.current ?? document;
+    const root = scrollRoot === document ? null : scrollRoot;
+
     const observer = new IntersectionObserver(
       (entries) => {
-        // Find the heading that's most visible
-        let mostVisible: IntersectionObserverEntry | null = null;
-        let maxRatio = 0;
-
+        let best: { id: string; ratio: number } | null = null;
         for (const entry of entries) {
-          if (entry.isIntersecting && entry.intersectionRatio > maxRatio) {
-            maxRatio = entry.intersectionRatio;
-            mostVisible = entry;
+          if (entry.isIntersecting && entry.intersectionRatio > 0) {
+            const ratio = entry.intersectionRatio;
+            if (!best || ratio > best.ratio) {
+              best = { id: entry.target.id, ratio };
+            }
           }
         }
-
-        if (mostVisible && mostVisible.intersectionRatio > 0.3) {
-          setActiveId(mostVisible.target.id);
+        if (best && best.ratio >= 0.2) {
+          setActiveId(best.id);
         }
       },
       {
-        rootMargin: "-20% 0% -35% 0%",
-        threshold: [0, 0.3, 0.5, 0.7, 1],
+        root,
+        rootMargin: "-80px 0% -60% 0%",
+        threshold: [0, 0.2, 0.4, 0.6, 0.8, 1],
       }
     );
 
-    // Wait a bit for DOM to be ready, then observe headings
     const timeoutId = setTimeout(() => {
       headings.forEach((heading) => {
         const element = document.getElementById(heading.id);
-        if (element) {
-          observer.observe(element);
-        }
+        if (element) observer.observe(element);
       });
-    }, 100);
+    }, 150);
 
     return () => {
       clearTimeout(timeoutId);
@@ -96,9 +105,7 @@ export function TableOfContents({ markdown }: { markdown: string }) {
     e.preventDefault();
     const element = document.getElementById(id);
     if (element) {
-      const yOffset = -80; // Account for fixed header
-      const y = element.getBoundingClientRect().top + window.pageYOffset + yOffset;
-      window.scrollTo({ top: y, behavior: "smooth" });
+      element.scrollIntoView({ behavior: "smooth", block: "start" });
       setActiveId(id);
     }
   };
@@ -111,27 +118,35 @@ export function TableOfContents({ markdown }: { markdown: string }) {
     <div className="sticky top-24 space-y-2">
       <h2 className="text-sm font-semibold text-foreground mb-3">On this page</h2>
       <nav className="space-y-1">
-        {headings.map((heading, index) => {
+        {visibleHeadings.map((heading, index) => {
           const isActive = activeId === heading.id;
-          const indent = heading.level === 3 ? "ml-4" : heading.level === 4 ? "ml-8" : "";
-          
+          const indent = heading.level === 3 ? "pl-4" : heading.level === 4 ? "pl-8" : "pl-0";
           return (
             <a
               key={index}
               href={`#${heading.id}`}
               onClick={(e) => handleClick(heading.id, e)}
               className={cn(
-                "block text-sm transition-colors hover:text-foreground",
+                "block py-1 text-sm transition-colors border-l-2 -ml-px",
                 indent,
                 isActive
-                  ? "text-primary font-medium"
-                  : "text-muted-foreground"
+                  ? "border-primary text-primary font-medium"
+                  : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
               )}
             >
               {heading.title}
             </a>
           );
         })}
+        {hasMore && (
+          <button
+            type="button"
+            onClick={() => setVisibleCount((c) => Math.min(c + SHOW_MORE_STEP, headings.length))}
+            className="text-xs text-muted-foreground hover:text-foreground mt-1"
+          >
+            Show more ({headings.length - visibleCount} more)
+          </button>
+        )}
       </nav>
     </div>
   );
