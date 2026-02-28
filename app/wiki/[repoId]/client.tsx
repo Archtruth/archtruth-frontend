@@ -1,11 +1,11 @@
 "use client";
 
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
-import { useEffect, useMemo, useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { presignWikiPage, presignOrgDocument } from "@/lib/api/backend";
 import { Button } from "@/components/ui/button";
-import { FileText, ChevronLeft, Calendar, Loader, BookOpen, Search, ChevronRight, ChevronDown, Folder, FolderOpen, ExternalLink, Code } from "lucide-react";
+import { FileText, ChevronLeft, Calendar, Loader, BookOpen, Search, ChevronRight, ChevronDown, Folder, FolderOpen, ExternalLink, Code, GitBranch, Layers, Network } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
@@ -35,21 +35,37 @@ type OrgDoc = {
   updated_at?: string;
 };
 
-type Service = {
-  name: string;
-  modules: WikiPage[];
+type NavNode = {
+  id: string;
+  label: string;
+  slug?: string;      // set only for leaf (clickable) nodes
+  path: string;       // accumulated path from root, used as expand-set key
+  page?: WikiPage;    // original page, only for leaf nodes
+  children: NavNode[];
+  order: number;
+  topLevelName: string; // top-level folder name for selectedService compat
 };
 
-const ORG_DOC_DISPLAY_NAMES: Record<string, string> = {
-  org_overview: "Overview",
-  org_architecture: "Architecture",
-  org_services: "Service Catalog",
-  org_interfaces: "Interfaces",
+const ORG_DOC_META: Record<string, { label: string; icon: React.ElementType; order: number }> = {
+  org_overview: { label: "Overview", icon: BookOpen, order: 0 },
+  org_architecture: { label: "Architecture", icon: GitBranch, order: 1 },
+  org_services: { label: "Service Catalog", icon: Layers, order: 2 },
+  org_interfaces: { label: "API Reference", icon: Network, order: 3 },
 };
 
 function getOrgDocDisplayName(filePath: string): string {
   const key = filePath.replace(/\.(md|mdx)$/i, "");
-  return ORG_DOC_DISPLAY_NAMES[key] ?? filePath.replace(/\.(md|mdx)$/i, "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  return ORG_DOC_META[key]?.label ?? filePath.replace(/\.(md|mdx)$/i, "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function getOrgDocIcon(filePath: string): React.ElementType {
+  const key = filePath.replace(/\.(md|mdx)$/i, "");
+  return ORG_DOC_META[key]?.icon ?? FileText;
+}
+
+function getOrgDocOrder(filePath: string): number {
+  const key = filePath.replace(/\.(md|mdx)$/i, "");
+  return ORG_DOC_META[key]?.order ?? 99;
 }
 
 async function fetchWikiContent(repoId: number, slug: string, token: string): Promise<string> {
@@ -96,7 +112,6 @@ export function FullScreenWikiClient({
   const [loading, setLoading] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [services, setServices] = useState<Service[]>([]);
   const [expandedServices, setExpandedServices] = useState<Set<string>>(() => {
     if (typeof window === "undefined") return new Set();
     try {
@@ -128,48 +143,64 @@ export function FullScreenWikiClient({
     });
   }, []);
 
-  const initializeFromWikiPages = useCallback(() => {
-    const serviceMap = new Map<string, WikiPage[]>();
+  // Build a hierarchical navigation tree from the wiki pages' slug paths.
+  // Slugs like "archtruth-ai/services" produce nested folders.
+  // Leaf nodes (that map to an actual page) are clickable; intermediate folder nodes expand/collapse.
+  const navTree = useMemo((): NavNode[] => {
     const normalizeSlug = (slug: string) => slug.replace(/\.(md|mdx)$/i, "");
-    const SYNTHETIC_PREFIXES = ["modules", "api", "architecture", "configuration", "guides", "generated", "general"];
+    const humanize = (s: string) =>
+      s.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+    const root: NavNode[] = [];
+
+    const findOrCreate = (nodes: NavNode[], id: string, label: string, path: string, topLevelName: string, order: number): NavNode => {
+      let node = nodes.find((n) => n.id === id);
+      if (!node) {
+        node = { id, label, path, topLevelName, children: [], order };
+        nodes.push(node);
+      }
+      return node;
+    };
 
     pages.forEach((page) => {
       const normalized = normalizeSlug(page.slug);
       const parts = normalized.split("/").filter(Boolean);
-      let serviceName: string;
-      if (parts.length > 1 && SYNTHETIC_PREFIXES.includes(parts[0].toLowerCase())) {
-        serviceName = parts[1];
-      } else if (parts.length > 1) {
-        serviceName = parts[0];
-      } else {
-        serviceName = page.category && page.category.trim().length > 0 ? page.category : "overview";
-      }
-      if (!serviceMap.has(serviceName)) {
-        serviceMap.set(serviceName, []);
-      }
-      serviceMap.get(serviceName)!.push(page);
+      if (parts.length === 0) return;
+
+      const topLevelName = parts[0];
+      let current = root;
+      let pathAcc = "";
+
+      parts.forEach((segment, idx) => {
+        pathAcc = pathAcc ? `${pathAcc}/${segment}` : segment;
+        const isLeaf = idx === parts.length - 1;
+        const nodeId = `node-${pathAcc}`;
+        const label = isLeaf ? page.title || humanize(segment) : humanize(segment);
+        const order = isLeaf ? page.nav_order ?? 999 : 0;
+
+        const node = findOrCreate(current, nodeId, label, pathAcc, topLevelName, order);
+
+        if (isLeaf) {
+          node.slug = page.slug;
+          node.page = page;
+          node.label = label;
+        }
+        current = node.children;
+      });
     });
 
-    const servicesArray: Service[] = Array.from(serviceMap.entries())
-      .map(([name, modules]) => ({
-        name,
-        modules: modules.sort((a, b) => {
-          const aOrder = a.nav_order ?? 0;
-          const bOrder = b.nav_order ?? 0;
-          if (aOrder !== bOrder) return aOrder - bOrder;
-          return a.title.localeCompare(b.title);
-        }),
-      }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    const sortNodes = (nodes: NavNode[]): NavNode[] => {
+      nodes.sort((a, b) => {
+        // Folders before leaves? No — preserve natural order by nav_order then label.
+        if (a.order !== b.order) return a.order - b.order;
+        return a.label.localeCompare(b.label);
+      });
+      nodes.forEach((n) => sortNodes(n.children));
+      return nodes;
+    };
 
-    setServices(servicesArray);
+    return sortNodes(root);
   }, [pages]);
-
-  // Always initialize navigation from real wiki pages.
-  // org_services.md remains useful as a content doc, but should not define module slugs.
-  useEffect(() => {
-    initializeFromWikiPages();
-  }, [initializeFromWikiPages]);
 
   // Initialize selection from URL or defaults
   useEffect(() => {
@@ -188,30 +219,38 @@ export function FullScreenWikiClient({
       }
     }
 
-    if (serviceParam && moduleParam) {
-      const service = services.find((s) => s.name === serviceParam);
-      if (service) {
-        const modulePage = service.modules.find((m) => m.slug === moduleParam);
-        if (modulePage) {
-          setSelectedType("module");
-          setSelectedService(serviceParam);
-          setSelectedModule(moduleParam);
-          setSelectedOrgDoc("");
-          return;
-        }
+    if (moduleParam) {
+      const matchingPage = pages.find((p) => p.slug === moduleParam);
+      if (matchingPage) {
+        const topName = moduleParam.split("/")[0];
+        setSelectedType("module");
+        setSelectedService(topName);
+        setSelectedModule(moduleParam);
+        setSelectedOrgDoc("");
+        return;
       }
     }
 
-    // Default to the first module when available so "View Wiki" opens repo docs immediately.
-    if (services.length > 0 && services[0].modules.length > 0) {
+    // Default to the first leaf page in the navTree when available.
+    const findFirstLeaf = (nodes: NavNode[]): NavNode | null => {
+      for (const n of nodes) {
+        if (n.slug) return n;
+        const found = findFirstLeaf(n.children);
+        if (found) return found;
+      }
+      return null;
+    };
+
+    const firstLeaf = findFirstLeaf(navTree);
+    if (firstLeaf?.slug) {
       setSelectedType("module");
-      setSelectedService(services[0].name);
-      setSelectedModule(services[0].modules[0].slug);
+      setSelectedService(firstLeaf.topLevelName);
+      setSelectedModule(firstLeaf.slug);
     } else if (orgDocs.length > 0) {
       setSelectedType("org-doc");
       setSelectedOrgDoc(orgDocs[0].file_path);
     }
-  }, [orgDocs, services, searchParams]);
+  }, [orgDocs, pages, navTree, searchParams]);
 
   // Keep expanded state in sync when selecting a module
   useEffect(() => {
@@ -321,37 +360,36 @@ export function FullScreenWikiClient({
         results.push({
           type: "org-doc",
           title: displayName,
-          subtitle: "Getting Started",
+          subtitle: "Organization",
           score,
           action: () => handleSelectOrgDoc(doc.file_path),
         });
       }
     });
 
-    services.forEach((service) => {
-      service.modules.forEach((module) => {
-        const score = Math.max(
-          scoreMatch(module.title),
-          scoreMatch(module.slug),
-          scoreMatch(service.name),
-          scoreMatch(module.category ?? "")
-        );
-        if (score > 0) {
-          results.push({
-            type: "module",
-            title: module.title,
-            subtitle: `${service.name} / ${module.slug}`,
-            preview: module.category ? `Category: ${module.category}` : undefined,
-            score,
-            action: () => handleSelectModule(service.name, module.slug),
-          });
-        }
-      });
+    pages.forEach((page) => {
+      const topName = page.slug.split("/")[0];
+      const score = Math.max(
+        scoreMatch(page.title),
+        scoreMatch(page.slug),
+        scoreMatch(topName),
+        scoreMatch(page.category ?? "")
+      );
+      if (score > 0) {
+        results.push({
+          type: "module",
+          title: page.title,
+          subtitle: `${topName} / ${page.slug}`,
+          preview: page.category ? `Category: ${page.category}` : undefined,
+          score,
+          action: () => handleSelectModule(topName, page.slug),
+        });
+      }
     });
 
     results.sort((a, b) => b.score - a.score);
     return results.slice(0, 15);
-  }, [searchQuery, orgDocs, services, handleSelectOrgDoc, handleSelectModule]);
+  }, [searchQuery, orgDocs, pages, handleSelectOrgDoc, handleSelectModule]);
 
   return (
     <div className="fixed inset-0 flex flex-col bg-background">
@@ -460,15 +498,17 @@ export function FullScreenWikiClient({
               );
             })()}
 
-            {/* Getting Started - Org Docs */}
+            {/* Organization Docs - each shown as its own categorized item */}
             {orgDocs.length > 0 && (
-              <div className="space-y-2">
-                <div className="px-2 py-1">
-                  <h2 className="text-sm font-semibold text-foreground">Getting Started</h2>
+              <div className="space-y-1">
+                <div className="px-2 py-1 border-b border-border/40 mb-2">
+                  <h2 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Organization</h2>
                 </div>
-                <div className="space-y-1">
-                  {orgDocs.map((doc) => {
+                {[...orgDocs]
+                  .sort((a, b) => getOrgDocOrder(a.file_path) - getOrgDocOrder(b.file_path))
+                  .map((doc) => {
                     const isSelected = selectedType === "org-doc" && selectedOrgDoc === doc.file_path;
+                    const Icon = getOrgDocIcon(doc.file_path);
                     return (
                       <button
                         key={doc.id}
@@ -481,100 +521,124 @@ export function FullScreenWikiClient({
                         )}
                       >
                         <div className="flex items-center gap-2">
-                          <FileText className="h-4 w-4 flex-shrink-0" />
-                          <span className="truncate">{getOrgDocDisplayName(doc.file_path)}</span>
+                          <Icon className="h-4 w-4 flex-shrink-0" />
+                          <span className="truncate font-medium">{getOrgDocDisplayName(doc.file_path)}</span>
                         </div>
                       </button>
                     );
                   })}
-                </div>
               </div>
             )}
 
-            {/* Services Section */}
-            {services.length > 0 && (
-              <div className="space-y-2">
-                <div className="px-2 py-1">
-                  <h2 className="text-sm font-semibold text-foreground">Services</h2>
-                </div>
-                <div className="space-y-1">
-                  {services.map((service) => {
-                    const isServiceSelected = selectedService === service.name;
-                    const hasModules = service.modules.length > 0;
-                    const isExpanded = expandedServices.has(service.name);
+            {/* Hierarchical Services / Modules Tree */}
+            {navTree.length > 0 && (() => {
+              const renderNavTree = (nodes: NavNode[], depth = 0): React.ReactNode =>
+                nodes.map((node) => {
+                  const isLeaf = !!node.slug;
+                  const isSelected = isLeaf && selectedModule === node.slug;
+                  const isExpanded = expandedServices.has(node.path);
+                  const hasChildren = node.children.length > 0;
 
+                  // Count how many leaf pages exist under this folder
+                  const countLeaves = (n: NavNode): number =>
+                    n.slug ? 1 : n.children.reduce((acc, c) => acc + countLeaves(c), 0);
+                  const leafCount = !isLeaf ? countLeaves(node) : 0;
+
+                  if (isLeaf) {
                     return (
-                      <div key={service.name} className="space-y-1">
-                        <div
-                          className={cn(
-                            "flex items-center gap-2 px-3 py-2 rounded-md border transition-colors text-sm cursor-pointer",
-                            isServiceSelected
-                              ? "border-primary/50 bg-primary/5"
-                              : "border-transparent hover:border-border hover:bg-muted/50"
-                          )}
-                          onClick={() => {
-                            if (hasModules) {
-                              handleSelectModule(service.name, service.modules[0].slug);
-                            }
-                          }}
-                        >
-                          <button
-                            type="button"
-                            data-expand-toggle
-                            className="p-0.5 -m-0.5 rounded hover:bg-muted/80 flex-shrink-0"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (hasModules) toggleServiceExpanded(service.name);
-                            }}
-                            aria-label={isExpanded ? "Collapse" : "Expand"}
-                          >
-                            {hasModules ? (
-                              isExpanded ? (
-                                <ChevronDown className="h-4 w-4 text-muted-foreground" />
-                              ) : (
-                                <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                              )
-                            ) : null}
-                          </button>
-                          {isServiceSelected ? (
-                            <FolderOpen className="h-4 w-4 text-primary flex-shrink-0" />
-                          ) : (
-                            <Folder className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                          )}
-                          <span className="flex-1 truncate font-medium">{service.name}</span>
-                          <span className="text-xs text-muted-foreground tabular-nums">[{service.modules.length}]</span>
-                        </div>
+                      <button
+                        key={node.id}
+                        onClick={() => handleSelectModule(node.topLevelName, node.slug!)}
+                        style={{ paddingLeft: depth > 0 ? `${depth * 12 + 12}px` : undefined }}
+                        className={cn(
+                          "w-full text-left px-3 py-1.5 rounded-md border transition-colors text-sm",
+                          isSelected
+                            ? "border-primary/70 bg-primary/10 text-primary shadow-sm"
+                            : "border-transparent hover:border-border hover:bg-muted/70 text-foreground/80 hover:text-foreground"
+                        )}
+                      >
+                        <span className="truncate block">{node.label}</span>
+                      </button>
+                    );
+                  }
 
-                        {/* Modules under service - show when expanded */}
-                        {isExpanded && hasModules && (
-                          <div className="ml-6 space-y-1 border-l border-border/60 pl-2">
-                            {service.modules.map((module) => {
-                              const isModuleSelected = selectedModule === module.slug;
-                              return (
-                                <button
-                                  key={module.id}
-                                  onClick={() => handleSelectModule(service.name, module.slug)}
-                                  className={cn(
-                                    "w-full text-left px-3 py-2 rounded-md border transition-colors text-sm",
-                                    isModuleSelected
-                                      ? "border-primary/70 bg-primary/10 text-primary shadow-sm"
-                                      : "border-transparent hover:border-border hover:bg-muted/70 text-foreground/80 hover:text-foreground"
-                                  )}
-                                >
-                                  <span className="truncate">{module.title}</span>
-                                </button>
-                              );
-                            })}
-                          </div>
+                  // Folder node
+                  const isFolderSelected = selectedService === node.topLevelName && depth === 0;
+                  return (
+                    <div key={node.id} className="space-y-0.5">
+                      <div
+                        className={cn(
+                          "flex items-center gap-1.5 px-2 py-1.5 rounded-md border transition-colors text-sm cursor-pointer",
+                          isFolderSelected && depth === 0
+                            ? "border-primary/30 bg-primary/5"
+                            : "border-transparent hover:border-border hover:bg-muted/40"
+                        )}
+                        style={{ paddingLeft: depth > 0 ? `${depth * 12 + 8}px` : undefined }}
+                        onClick={() => {
+                          if (hasChildren) toggleServiceExpanded(node.path);
+                          // Also navigate to first leaf when clicking a top-level folder
+                          if (depth === 0 && !isExpanded) {
+                            const findFirst = (ns: NavNode[]): NavNode | null => {
+                              for (const n of ns) {
+                                if (n.slug) return n;
+                                const f = findFirst(n.children);
+                                if (f) return f;
+                              }
+                              return null;
+                            };
+                            const first = findFirst(node.children);
+                            if (first?.slug) handleSelectModule(node.topLevelName, first.slug);
+                          }
+                        }}
+                      >
+                        <button
+                          type="button"
+                          className="p-0.5 rounded hover:bg-muted/80 flex-shrink-0"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            if (hasChildren) toggleServiceExpanded(node.path);
+                          }}
+                          aria-label={isExpanded ? "Collapse" : "Expand"}
+                        >
+                          {hasChildren ? (
+                            isExpanded ? (
+                              <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                            ) : (
+                              <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                            )
+                          ) : null}
+                        </button>
+                        {isFolderSelected && depth === 0 ? (
+                          <FolderOpen className="h-3.5 w-3.5 text-primary flex-shrink-0" />
+                        ) : (
+                          <Folder className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                        )}
+                        <span className="flex-1 truncate font-medium text-foreground/90">{node.label}</span>
+                        {leafCount > 0 && (
+                          <span className="text-[10px] text-muted-foreground tabular-nums">{leafCount}</span>
                         )}
                       </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
 
-            {orgDocs.length === 0 && services.length === 0 && (
+                      {isExpanded && hasChildren && (
+                        <div className={cn("space-y-0.5", depth === 0 ? "ml-4 border-l border-border/50 pl-1" : "")}>
+                          {renderNavTree(node.children, depth + 1)}
+                        </div>
+                      )}
+                    </div>
+                  );
+                });
+
+              return (
+                <div className="space-y-1">
+                  <div className="px-2 py-1 border-b border-border/40 mb-2">
+                    <h2 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Services</h2>
+                  </div>
+                  <div className="space-y-0.5">{renderNavTree(navTree)}</div>
+                </div>
+              );
+            })()}
+
+            {orgDocs.length === 0 && navTree.length === 0 && (
               <div className="text-center py-8 text-sm text-muted-foreground">
                 <p>No content available.</p>
               </div>
@@ -594,7 +658,7 @@ export function FullScreenWikiClient({
                 <div className="rounded-xl border bg-card/80 backdrop-blur shadow-sm p-6">
                   <div className="flex flex-wrap items-center justify-between gap-4">
                     <div>
-                      <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">Getting Started</p>
+                      <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">Organization</p>
                       <h1 className="text-3xl font-bold leading-tight">{getOrgDocDisplayName(selectedDoc.file_path)}</h1>
                     </div>
                   </div>
@@ -787,20 +851,16 @@ export function FullScreenWikiClient({
                             }
                             const modulePage = pages.find((p) => p.slug === slug);
                             if (modulePage) {
-                              const service = services.find((s) =>
-                                s.modules.some((m) => m.slug === slug)
+                              const topName = slug.split("/")[0];
+                              return (
+                                <button
+                                  type="button"
+                                  className="text-primary underline underline-offset-4 hover:opacity-90"
+                                  onClick={() => handleSelectModule(topName, slug)}
+                                >
+                                  {children}
+                                </button>
                               );
-                              if (service) {
-                                return (
-                                  <button
-                                    type="button"
-                                    className="text-primary underline underline-offset-4 hover:opacity-90"
-                                    onClick={() => handleSelectModule(service.name, slug)}
-                                  >
-                                    {children}
-                                  </button>
-                                );
-                              }
                             }
                           }
                           // Handle code: protocol links (render file path inline)

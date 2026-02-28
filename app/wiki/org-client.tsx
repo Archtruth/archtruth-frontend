@@ -1,11 +1,11 @@
 "use client";
 
+import React, { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
-import { useEffect, useMemo, useState, useCallback } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { presignWikiPage, presignOrgDocument } from "@/lib/api/backend-client";
 import { Button } from "@/components/ui/button";
-import { FileText, ChevronLeft, Calendar, Loader, BookOpen, Search, ChevronRight, ChevronDown, Folder, FolderOpen, ExternalLink, Code } from "lucide-react";
+import { FileText, ChevronLeft, Calendar, Loader, BookOpen, Search, ChevronRight, ChevronDown, Folder, FolderOpen, ExternalLink, Code, GitBranch, Layers, Network } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
@@ -37,16 +37,26 @@ type RepoWithPages = {
   pages: WikiPage[];
 };
 
-const ORG_DOC_DISPLAY_NAMES: Record<string, string> = {
-  org_overview: "Overview",
-  org_architecture: "Architecture",
-  org_services: "Service Catalog",
-  org_interfaces: "Interfaces",
+const ORG_DOC_META: Record<string, { label: string; icon: React.ElementType; order: number }> = {
+  org_overview: { label: "Overview", icon: BookOpen, order: 0 },
+  org_architecture: { label: "Architecture", icon: GitBranch, order: 1 },
+  org_services: { label: "Service Catalog", icon: Layers, order: 2 },
+  org_interfaces: { label: "API Reference", icon: Network, order: 3 },
 };
 
 function getOrgDocDisplayName(filePath: string): string {
   const key = filePath.replace(/\.(md|mdx)$/i, "");
-  return ORG_DOC_DISPLAY_NAMES[key] ?? filePath.replace(/\.(md|mdx)$/i, "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+  return ORG_DOC_META[key]?.label ?? filePath.replace(/\.(md|mdx)$/i, "").replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+}
+
+function getOrgDocIcon(filePath: string): React.ElementType {
+  const key = filePath.replace(/\.(md|mdx)$/i, "");
+  return ORG_DOC_META[key]?.icon ?? FileText;
+}
+
+function getOrgDocOrder(filePath: string): number {
+  const key = filePath.replace(/\.(md|mdx)$/i, "");
+  return ORG_DOC_META[key]?.order ?? 99;
 }
 
 function getRepoShortName(fullName: string): string {
@@ -275,12 +285,12 @@ export function OrgWikiClient({
       const score = Math.max(scoreMatch(doc.file_path), scoreMatch(displayName));
       if (score > 0) {
         results.push({
-          type: "org-doc",
-          title: displayName,
-          subtitle: "Getting Started",
-          score,
-          action: () => handleSelectOrgDoc(doc.file_path),
-        });
+            type: "org-doc",
+            title: displayName,
+            subtitle: "Organization",
+            score,
+            action: () => handleSelectOrgDoc(doc.file_path),
+          });
       }
     });
     repos.forEach((repo) => {
@@ -496,30 +506,33 @@ export function OrgWikiClient({
             })()}
 
             {orgDocs.length > 0 && (
-              <div className="space-y-2">
-                <div className="px-2 py-1">
-                  <h2 className="text-sm font-semibold text-foreground">Getting Started</h2>
+              <div className="space-y-1">
+                <div className="px-2 py-1 border-b border-border/40 mb-2">
+                  <h2 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Organization</h2>
                 </div>
-                <div className="space-y-1">
-                  {orgDocs.map((doc) => {
+                {[...orgDocs]
+                  .sort((a, b) => getOrgDocOrder(a.file_path) - getOrgDocOrder(b.file_path))
+                  .map((doc) => {
                     const isSelected = selectedType === "org-doc" && selectedOrgDoc === doc.file_path;
+                    const Icon = getOrgDocIcon(doc.file_path);
                     return (
                       <button
                         key={doc.id}
                         onClick={() => handleSelectOrgDoc(doc.file_path)}
                         className={cn(
                           "w-full text-left px-3 py-2 rounded-md border transition-colors text-sm",
-                          isSelected ? "border-primary/70 bg-primary/10 text-primary shadow-sm" : "border-transparent hover:border-border hover:bg-muted/70 text-foreground/80 hover:text-foreground"
+                          isSelected
+                            ? "border-primary/70 bg-primary/10 text-primary shadow-sm"
+                            : "border-transparent hover:border-border hover:bg-muted/70 text-foreground/80 hover:text-foreground"
                         )}
                       >
                         <div className="flex items-center gap-2">
-                          <FileText className="h-4 w-4 flex-shrink-0" />
-                          <span className="truncate">{getOrgDocDisplayName(doc.file_path)}</span>
+                          <Icon className="h-4 w-4 flex-shrink-0" />
+                          <span className="truncate font-medium">{getOrgDocDisplayName(doc.file_path)}</span>
                         </div>
                       </button>
                     );
                   })}
-                </div>
               </div>
             )}
 
@@ -603,7 +616,7 @@ export function OrgWikiClient({
               <div className="space-y-6">
                 <div className="rounded-xl border bg-card/80 backdrop-blur shadow-sm p-6">
                   <div>
-                    <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">Getting Started</p>
+                    <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">Organization</p>
                     <h1 className="text-3xl font-bold leading-tight">{getOrgDocDisplayName(selectedDoc.file_path)}</h1>
                   </div>
                   {selectedDoc.updated_at && (
