@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { presignWikiPage, presignOrgDocument } from "@/lib/api/backend-client";
+import { presignWikiPage, presignOrgDocument } from "@/lib/api/backend";
 import { Button } from "@/components/ui/button";
 import { FileText, ChevronLeft, Calendar, Loader, BookOpen, Search, ChevronRight, ChevronDown, Folder, FolderOpen, ExternalLink, Code, GitBranch, Layers, Network } from "lucide-react";
 import ReactMarkdown from "react-markdown";
@@ -72,6 +72,32 @@ function getOrgDocOrder(filePath: string): number {
 function getRepoShortName(fullName: string): string {
   const parts = fullName.split("/");
   return parts[parts.length - 1] || fullName;
+}
+
+type SectionNavItem = { id: string; title: string; level: number };
+
+function toHeadingId(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .trim();
+}
+
+function extractSectionNav(markdown: string): SectionNavItem[] {
+  if (!markdown) return [];
+  const out: SectionNavItem[] = [];
+  for (const raw of markdown.split("\n")) {
+    const line = raw.trim();
+    const m = /^(##|###)\s+(.+)$/.exec(line);
+    if (!m) continue;
+    const title = m[2].trim();
+    const id = toHeadingId(title);
+    if (!id) continue;
+    out.push({ id, title, level: m[1] === "##" ? 2 : 3 });
+  }
+  return out;
 }
 
 async function fetchWikiContent(repoId: number, slug: string, token: string): Promise<string> {
@@ -363,6 +389,10 @@ export function OrgWikiClient({
     }
     return null;
   }, [selectedType, selectedOrgDoc, orgDocs]);
+  const selectedServiceSections = useMemo(() => {
+    if (selectedType !== "module") return [];
+    return extractSectionNav(markdown);
+  }, [selectedType, markdown]);
 
   const allPages = useMemo(() => repos.flatMap((r) => r.pages.map((p) => ({ ...p, repoId: r.id, repoName: r.full_name }))), [repos]);
 
@@ -661,19 +691,40 @@ export function OrgWikiClient({
 
                         if (isLeaf) {
                           return (
-                            <button
-                              key={node.id}
-                              onClick={() => handleSelectModule(repo.id, node.slug!)}
-                              style={{ paddingLeft: depth > 0 ? `${depth * 12 + 12}px` : undefined }}
-                              className={cn(
-                                "w-full text-left px-3 py-2 rounded-md border transition-colors text-sm",
-                                isLeafSelected
-                                  ? "border-primary/70 bg-primary/10 text-primary shadow-sm"
-                                  : "border-transparent hover:border-border hover:bg-muted/70 text-foreground/80 hover:text-foreground"
+                            <div key={node.id} className="space-y-0.5">
+                              <button
+                                onClick={() => handleSelectModule(repo.id, node.slug!)}
+                                style={{ paddingLeft: depth > 0 ? `${depth * 12 + 12}px` : undefined }}
+                                className={cn(
+                                  "w-full text-left px-3 py-2 rounded-md border transition-colors text-sm",
+                                  isLeafSelected
+                                    ? "border-primary/70 bg-primary/10 text-primary shadow-sm"
+                                    : "border-transparent hover:border-border hover:bg-muted/70 text-foreground/80 hover:text-foreground"
+                                )}
+                              >
+                                <span className="truncate">{node.label}</span>
+                              </button>
+                              {isLeafSelected && selectedServiceSections.length > 0 && (
+                                <div className="ml-6 space-y-0.5 border-l border-border/50 pl-2">
+                                  {selectedServiceSections.map((section) => (
+                                    <button
+                                      key={`${node.id}-${section.id}`}
+                                      type="button"
+                                      onClick={() => {
+                                        const target = document.getElementById(section.id);
+                                        if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+                                      }}
+                                      className={cn(
+                                        "w-full text-left text-xs rounded px-2 py-1 hover:bg-muted/60",
+                                        section.level === 3 ? "ml-3 text-muted-foreground" : "text-foreground/80"
+                                      )}
+                                    >
+                                      {section.title}
+                                    </button>
+                                  ))}
+                                </div>
                               )}
-                            >
-                              <span className="truncate">{node.label}</span>
-                            </button>
+                            </div>
                           );
                         }
 
@@ -742,7 +793,6 @@ export function OrgWikiClient({
                           </button>
                           {isRepoSelected ? <FolderOpen className="h-4 w-4 text-primary flex-shrink-0" /> : <Folder className="h-4 w-4 text-muted-foreground flex-shrink-0" />}
                           <span className="flex-1 truncate font-medium">{shortName}</span>
-                          <span className="text-xs text-muted-foreground tabular-nums">[{repo.pages.length}]</span>
                         </div>
                         {isExpanded && hasPages && (
                           <div className="ml-6 space-y-1 border-l border-border/60 pl-2">
@@ -796,7 +846,7 @@ export function OrgWikiClient({
               <div className="space-y-6">
                 <div className="rounded-xl border bg-card/80 backdrop-blur shadow-sm p-6">
                   <div>
-                    <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">Module</p>
+                    <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">Service</p>
                     <h1 className="text-3xl font-bold leading-tight">{selectedPage.title}</h1>
                     <p className="text-sm text-muted-foreground mt-1">
                       {selectedRepoId && getRepoShortName(repos.find((r) => r.id === selectedRepoId)?.full_name ?? "")} / {selectedPage.slug}

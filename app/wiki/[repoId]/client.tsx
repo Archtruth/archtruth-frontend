@@ -86,6 +86,34 @@ async function fetchOrgDocContent(orgId: string, fileName: string, token: string
   return resp.text();
 }
 
+type SectionNavItem = { id: string; title: string; level: number };
+
+function toHeadingId(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^a-z0-9\s-]/g, "")
+    .replace(/\s+/g, "-")
+    .replace(/-+/g, "-")
+    .trim();
+}
+
+function extractSectionNav(markdown: string): SectionNavItem[] {
+  if (!markdown) return [];
+  const lines = markdown.split("\n");
+  const out: SectionNavItem[] = [];
+  for (const raw of lines) {
+    const line = raw.trim();
+    const m = /^(##|###)\s+(.+)$/.exec(line);
+    if (!m) continue;
+    const level = m[1] === "##" ? 2 : 3;
+    const title = m[2].trim();
+    const id = toHeadingId(title);
+    if (!id) continue;
+    out.push({ id, title, level });
+  }
+  return out;
+}
+
 export function FullScreenWikiClient({
   repoId,
   orgId,
@@ -337,6 +365,11 @@ export function FullScreenWikiClient({
     return null;
   }, [selectedType, selectedOrgDoc, orgDocs]);
 
+  const selectedServiceSections = useMemo(() => {
+    if (selectedType !== "module") return [];
+    return extractSectionNav(markdown);
+  }, [selectedType, markdown]);
+
   const filteredPages = useMemo(() => {
     if (!searchQuery) return [];
     const q = searchQuery.toLowerCase().trim();
@@ -539,26 +572,42 @@ export function FullScreenWikiClient({
                   const isExpanded = expandedServices.has(node.path);
                   const hasChildren = node.children.length > 0;
 
-                  // Count how many leaf pages exist under this folder
-                  const countLeaves = (n: NavNode): number =>
-                    n.slug ? 1 : n.children.reduce((acc, c) => acc + countLeaves(c), 0);
-                  const leafCount = !isLeaf ? countLeaves(node) : 0;
-
                   if (isLeaf) {
                     return (
-                      <button
-                        key={node.id}
-                        onClick={() => handleSelectModule(node.topLevelName, node.slug!)}
-                        style={{ paddingLeft: depth > 0 ? `${depth * 12 + 12}px` : undefined }}
-                        className={cn(
-                          "w-full text-left px-3 py-1.5 rounded-md border transition-colors text-sm",
-                          isSelected
-                            ? "border-primary/70 bg-primary/10 text-primary shadow-sm"
-                            : "border-transparent hover:border-border hover:bg-muted/70 text-foreground/80 hover:text-foreground"
+                      <div key={node.id} className="space-y-0.5">
+                        <button
+                          onClick={() => handleSelectModule(node.topLevelName, node.slug!)}
+                          style={{ paddingLeft: depth > 0 ? `${depth * 12 + 12}px` : undefined }}
+                          className={cn(
+                            "w-full text-left px-3 py-1.5 rounded-md border transition-colors text-sm",
+                            isSelected
+                              ? "border-primary/70 bg-primary/10 text-primary shadow-sm"
+                              : "border-transparent hover:border-border hover:bg-muted/70 text-foreground/80 hover:text-foreground"
+                          )}
+                        >
+                          <span className="truncate block">{node.label}</span>
+                        </button>
+                        {isSelected && selectedServiceSections.length > 0 && (
+                          <div className="ml-6 space-y-0.5 border-l border-border/50 pl-2">
+                            {selectedServiceSections.map((section) => (
+                              <button
+                                key={`${node.id}-${section.id}`}
+                                type="button"
+                                onClick={() => {
+                                  const target = document.getElementById(section.id);
+                                  if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
+                                }}
+                                className={cn(
+                                  "w-full text-left text-xs rounded px-2 py-1 hover:bg-muted/60",
+                                  section.level === 3 ? "ml-3 text-muted-foreground" : "text-foreground/80"
+                                )}
+                              >
+                                {section.title}
+                              </button>
+                            ))}
+                          </div>
                         )}
-                      >
-                        <span className="truncate block">{node.label}</span>
-                      </button>
+                      </div>
                     );
                   }
 
@@ -614,9 +663,6 @@ export function FullScreenWikiClient({
                           <Folder className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
                         )}
                         <span className="flex-1 truncate font-medium text-foreground/90">{node.label}</span>
-                        {leafCount > 0 && (
-                          <span className="text-[10px] text-muted-foreground tabular-nums">{leafCount}</span>
-                        )}
                       </div>
 
                       {isExpanded && hasChildren && (
@@ -749,7 +795,7 @@ export function FullScreenWikiClient({
                 <div className="rounded-xl border bg-card/80 backdrop-blur shadow-sm p-6">
                   <div className="flex flex-wrap items-center justify-between gap-4">
                     <div>
-                      <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">Module</p>
+                      <p className="text-xs uppercase tracking-[0.1em] text-muted-foreground">Service</p>
                       <h1 className="text-3xl font-bold leading-tight">{selectedPage.title}</h1>
                       <p className="text-sm text-muted-foreground mt-1">{selectedPage.slug}</p>
                     </div>
