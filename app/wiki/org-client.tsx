@@ -37,6 +37,16 @@ type RepoWithPages = {
   pages: WikiPage[];
 };
 
+type NavNode = {
+  id: string;
+  label: string;
+  slug?: string;
+  path: string;
+  children: NavNode[];
+  order: number;
+  page?: WikiPage;
+};
+
 const ORG_DOC_META: Record<string, { label: string; icon: React.ElementType; order: number }> = {
   org_overview: { label: "Overview", icon: BookOpen, order: 0 },
   org_architecture: { label: "Architecture", icon: GitBranch, order: 1 },
@@ -115,6 +125,19 @@ export function OrgWikiClient({
     }
     return new Set();
   });
+  const [expandedRepoPaths, setExpandedRepoPaths] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const stored = sessionStorage.getItem("wiki-org-expanded-paths");
+      if (stored) {
+        const arr = JSON.parse(stored) as string[];
+        return new Set(arr);
+      }
+    } catch {
+      /* ignore */
+    }
+    return new Set();
+  });
 
   const toggleRepoExpanded = useCallback((repoId: number) => {
     setExpandedRepos((prev) => {
@@ -128,6 +151,85 @@ export function OrgWikiClient({
       }
       return next;
     });
+  }, []);
+  const toggleRepoPathExpanded = useCallback((pathKey: string) => {
+    setExpandedRepoPaths((prev) => {
+      const next = new Set(prev);
+      if (next.has(pathKey)) next.delete(pathKey);
+      else next.add(pathKey);
+      try {
+        sessionStorage.setItem("wiki-org-expanded-paths", JSON.stringify([...next]));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
+
+  const repoNavTrees = useMemo(() => {
+    const normalizeSlug = (slug: string) => slug.replace(/\.(md|mdx)$/i, "");
+    const humanize = (s: string) => s.replace(/[-_]/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
+
+    const out = new Map<number, NavNode[]>();
+    repos.forEach((repo) => {
+      const root: NavNode[] = [];
+
+      repo.pages.forEach((page) => {
+        const normalized = normalizeSlug(page.slug);
+        const segments = normalized.split("/").filter(Boolean);
+        if (segments.length === 0) return;
+
+        let current = root;
+        let pathAcc = "";
+        segments.forEach((segment, idx) => {
+          pathAcc = pathAcc ? `${pathAcc}/${segment}` : segment;
+          const isLeaf = idx === segments.length - 1;
+          const nodeId = `${repo.id}-${pathAcc}`;
+          let node = current.find((n) => n.id === nodeId);
+
+          if (!node) {
+            node = {
+              id: nodeId,
+              label: isLeaf ? page.title || humanize(segment) : humanize(segment),
+              slug: isLeaf ? page.slug : undefined,
+              path: pathAcc,
+              children: [],
+              order: isLeaf ? page.nav_order ?? 999 : 0,
+              page: isLeaf ? page : undefined,
+            };
+            current.push(node);
+          }
+
+          if (isLeaf) {
+            node.label = page.title || humanize(segment);
+            node.slug = page.slug;
+            node.page = page;
+            node.order = page.nav_order ?? 999;
+          }
+          current = node.children;
+        });
+      });
+
+      const sortNodes = (nodes: NavNode[]) => {
+        nodes.sort((a, b) => {
+          if (a.order !== b.order) return a.order - b.order;
+          return a.label.localeCompare(b.label);
+        });
+        nodes.forEach((n) => sortNodes(n.children));
+      };
+      sortNodes(root);
+      out.set(repo.id, root);
+    });
+    return out;
+  }, [repos]);
+
+  const findFirstLeaf = useCallback((nodes: NavNode[]): NavNode | null => {
+    for (const node of nodes) {
+      if (node.slug) return node;
+      const found = findFirstLeaf(node.children);
+      if (found) return found;
+    }
+    return null;
   }, []);
 
   useEffect(() => {
@@ -544,9 +646,75 @@ export function OrgWikiClient({
                 <div className="space-y-1">
                   {repos.map((repo) => {
                     const isRepoSelected = selectedRepoId === repo.id;
-                    const hasPages = repo.pages.length > 0;
+                    const tree = repoNavTrees.get(repo.id) || [];
+                    const hasPages = tree.length > 0;
                     const isExpanded = expandedRepos.has(repo.id);
                     const shortName = getRepoShortName(repo.full_name);
+
+                    const renderRepoTree = (nodes: NavNode[], depth = 0): React.ReactNode =>
+                      nodes.map((node) => {
+                        const pathKey = `${repo.id}:${node.path}`;
+                        const hasChildren = node.children.length > 0;
+                        const isPathExpanded = expandedRepoPaths.has(pathKey);
+                        const isLeaf = !!node.slug;
+                        const isLeafSelected = isLeaf && selectedRepoId === repo.id && selectedModule === node.slug;
+
+                        if (isLeaf) {
+                          return (
+                            <button
+                              key={node.id}
+                              onClick={() => handleSelectModule(repo.id, node.slug!)}
+                              style={{ paddingLeft: depth > 0 ? `${depth * 12 + 12}px` : undefined }}
+                              className={cn(
+                                "w-full text-left px-3 py-2 rounded-md border transition-colors text-sm",
+                                isLeafSelected
+                                  ? "border-primary/70 bg-primary/10 text-primary shadow-sm"
+                                  : "border-transparent hover:border-border hover:bg-muted/70 text-foreground/80 hover:text-foreground"
+                              )}
+                            >
+                              <span className="truncate">{node.label}</span>
+                            </button>
+                          );
+                        }
+
+                        return (
+                          <div key={node.id} className="space-y-1">
+                            <div
+                              className={cn(
+                                "flex items-center gap-2 px-3 py-1.5 rounded-md border transition-colors text-sm cursor-pointer",
+                                "border-transparent hover:border-border hover:bg-muted/40"
+                              )}
+                              style={{ paddingLeft: depth > 0 ? `${depth * 12 + 8}px` : undefined }}
+                              onClick={() => hasChildren && toggleRepoPathExpanded(pathKey)}
+                            >
+                              <button
+                                type="button"
+                                className="p-0.5 -m-0.5 rounded hover:bg-muted/80 flex-shrink-0"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  if (hasChildren) toggleRepoPathExpanded(pathKey);
+                                }}
+                                aria-label={isPathExpanded ? "Collapse" : "Expand"}
+                              >
+                                {hasChildren ? (
+                                  isPathExpanded ? (
+                                    <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                                  ) : (
+                                    <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                                  )
+                                ) : null}
+                              </button>
+                              <Folder className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                              <span className="flex-1 truncate font-medium text-foreground/90">{node.label}</span>
+                            </div>
+                            {isPathExpanded && hasChildren && (
+                              <div className={cn("space-y-1", depth === 0 ? "ml-4 border-l border-border/50 pl-1" : "")}>
+                                {renderRepoTree(node.children, depth + 1)}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      });
 
                     return (
                       <div key={repo.id} className="space-y-1">
@@ -555,7 +723,11 @@ export function OrgWikiClient({
                             "flex items-center gap-2 px-3 py-2 rounded-md border transition-colors text-sm cursor-pointer",
                             isRepoSelected ? "border-primary/50 bg-primary/5" : "border-transparent hover:border-border hover:bg-muted/50"
                           )}
-                          onClick={() => hasPages && handleSelectModule(repo.id, repo.pages[0].slug)}
+                          onClick={() => {
+                            if (!hasPages) return;
+                            const firstLeaf = findFirstLeaf(tree);
+                            if (firstLeaf?.slug) handleSelectModule(repo.id, firstLeaf.slug);
+                          }}
                         >
                           <button
                             type="button"
@@ -574,21 +746,7 @@ export function OrgWikiClient({
                         </div>
                         {isExpanded && hasPages && (
                           <div className="ml-6 space-y-1 border-l border-border/60 pl-2">
-                            {repo.pages.map((module) => {
-                              const isModuleSelected = selectedModule === module.slug && selectedRepoId === repo.id;
-                              return (
-                                <button
-                                  key={module.id}
-                                  onClick={() => handleSelectModule(repo.id, module.slug)}
-                                  className={cn(
-                                    "w-full text-left px-3 py-2 rounded-md border transition-colors text-sm",
-                                    isModuleSelected ? "border-primary/70 bg-primary/10 text-primary shadow-sm" : "border-transparent hover:border-border hover:bg-muted/70 text-foreground/80 hover:text-foreground"
-                                  )}
-                                >
-                                  <span className="truncate">{module.title}</span>
-                                </button>
-                              );
-                            })}
+                            {renderRepoTree(tree)}
                           </div>
                         )}
                       </div>
