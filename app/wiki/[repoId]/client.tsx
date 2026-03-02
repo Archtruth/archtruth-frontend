@@ -103,13 +103,12 @@ function extractSectionNav(markdown: string): SectionNavItem[] {
   const out: SectionNavItem[] = [];
   for (const raw of lines) {
     const line = raw.trim();
-    const m = /^(##|###)\s+(.+)$/.exec(line);
+    const m = /^(##)\s+(.+)$/.exec(line);
     if (!m) continue;
-    const level = m[1] === "##" ? 2 : 3;
     const title = m[2].trim();
     const id = toHeadingId(title);
     if (!id) continue;
-    out.push({ id, title, level });
+    out.push({ id, title, level: 2 });
   }
   return out;
 }
@@ -597,10 +596,7 @@ export function FullScreenWikiClient({
                                   const target = document.getElementById(section.id);
                                   if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
                                 }}
-                                className={cn(
-                                  "w-full text-left text-xs rounded px-2 py-1 hover:bg-muted/60",
-                                  section.level === 3 ? "ml-3 text-muted-foreground" : "text-foreground/80"
-                                )}
+                                className="w-full text-left text-xs rounded px-2 py-1 hover:bg-muted/60 text-foreground/80"
                               >
                                 {section.title}
                               </button>

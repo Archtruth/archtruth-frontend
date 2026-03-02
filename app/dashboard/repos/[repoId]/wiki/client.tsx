@@ -98,12 +98,11 @@ export function RepoWikiPageClient({
         const headings: { id: string; text: string; level: number }[] = [];
         const lines = content.split('\n');
         lines.forEach((line) => {
-          const match = line.match(/^(#{2,3})\s+(.+)$/);
+          const match = line.match(/^##\s+(.+)$/);
           if (match) {
-            const level = match[1].length;
-            const text = match[2].trim();
+            const text = match[1].trim();
             const id = text.toLowerCase().replace(/[^\w]+/g, '-');
-            headings.push({ id, text, level });
+            headings.push({ id, text, level: 2 });
           }
         });
         setToc(headings);
@@ -554,10 +553,7 @@ export function RepoWikiPageClient({
                                   e.preventDefault();
                                   document.getElementById(item.id)?.scrollIntoView({ behavior: 'smooth' });
                                 }}
-                                className={cn(
-                                  "block py-1 border-l-2 border-transparent pl-3 -ml-[1px] hover:border-primary/50 hover:text-foreground transition-colors text-muted-foreground truncate",
-                                  item.level === 3 && "pl-6"
-                                )}
+                                className="block py-1 border-l-2 border-transparent pl-3 -ml-[1px] hover:border-primary/50 hover:text-foreground transition-colors text-muted-foreground truncate"
                               >
                                 {item.text}
                               </a>
