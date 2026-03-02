@@ -6,6 +6,7 @@ import { getServerSession } from "@/lib/supabase/server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { ConnectGithubSkeleton } from "@/components/ui/loading-skeleton";
 
 const installUrl = process.env.NEXT_PUBLIC_GITHUB_APP_INSTALL_URL || "#";
@@ -216,6 +217,22 @@ async function ConnectGithubContent({ searchParams }: { searchParams: Record<str
               })}
             </div>
           ) : null}
+
+          <div className="mt-4 rounded-md border border-dashed border-border bg-muted/50 p-3">
+            <p className="mb-2 text-sm font-medium">Don&apos;t see your org?</p>
+            <p className="mb-3 text-xs text-mutedForeground">
+              If your GitHub org isn&apos;t listed above (e.g. new org, pagination limit, or re-login needed for <code>read:org</code>), enter the org login and we&apos;ll create a workspace and take you to install.
+            </p>
+            <form action={createWorkspaceAndInstall} className="flex flex-wrap gap-2">
+              <Input
+                name="org_login"
+                placeholder="e.g. my-company"
+                className="max-w-sm"
+                required
+              />
+              <Button size="sm" type="submit">Create workspace &amp; install</Button>
+            </form>
+          </div>
         </CardContent>
       </Card>
     </div>
