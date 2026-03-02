@@ -1,43 +1,49 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, useCallback } from "react";
 import { cn } from "@/lib/utils";
-import { AlertCircle, Loader2 } from "lucide-react";
-import { MermaidPreviewModal } from "./MermaidPreviewModal";
+import { AlertCircle, Loader2, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
+import { Button } from "@/components/ui/button";
+
+const ZOOM_LEVELS = [0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3];
+const DEFAULT_ZOOM_INDEX = 2; // 1x
 
 export function MermaidBlock({ code, caption }: { code: string; caption?: string }) {
   const [svg, setSvg] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [isLoading, setIsLoading] = useState(true);
   const [isDarkMode, setIsDarkMode] = useState(false);
-  const [previewOpen, setPreviewOpen] = useState(false);
+  const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
 
   const id = useMemo(() => `mmd-${Math.random().toString(36).slice(2)}`, []);
+  const zoom = ZOOM_LEVELS[zoomIndex];
 
-  // Detect dark mode
+  const zoomIn = useCallback(() => {
+    setZoomIndex((i) => Math.min(i + 1, ZOOM_LEVELS.length - 1));
+  }, []);
+
+  const zoomOut = useCallback(() => {
+    setZoomIndex((i) => Math.max(i - 1, 0));
+  }, []);
+
+  const resetZoom = useCallback(() => {
+    setZoomIndex(DEFAULT_ZOOM_INDEX);
+  }, []);
+
+  // Match page theme: only use document class, not system preference
   useEffect(() => {
     const checkDarkMode = () => {
-      setIsDarkMode(
-        document.documentElement.classList.contains("dark") ||
-        window.matchMedia("(prefers-color-scheme: dark)").matches
-      );
+      setIsDarkMode(document.documentElement.classList.contains("dark"));
     };
     checkDarkMode();
-    
-    // Watch for theme changes
+
     const observer = new MutationObserver(checkDarkMode);
     observer.observe(document.documentElement, {
       attributes: true,
       attributeFilter: ["class"],
     });
 
-    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
-    mediaQuery.addEventListener("change", checkDarkMode);
-
-    return () => {
-      observer.disconnect();
-      mediaQuery.removeEventListener("change", checkDarkMode);
-    };
+    return () => observer.disconnect();
   }, []);
 
   useEffect(() => {
@@ -48,8 +54,8 @@ export function MermaidBlock({ code, caption }: { code: string; caption?: string
     const run = async () => {
       try {
         const mermaid = (await import("mermaid")).default;
-        
-        // Configure theme based on dark mode
+
+        // Match page theme: light when page is light, dark when page is dark
         const themeConfig = isDarkMode
           ? {
               theme: "dark" as const,
@@ -98,7 +104,7 @@ export function MermaidBlock({ code, caption }: { code: string; caption?: string
 
         const { svg: renderedSvg } = await mermaid.render(id, cleaned);
         if (cancelled) return;
-        
+
         setSvg(renderedSvg);
         setError("");
         setIsLoading(false);
@@ -146,36 +152,58 @@ export function MermaidBlock({ code, caption }: { code: string; caption?: string
 
   return (
     <div className="my-6">
-      <button
-        type="button"
-        onClick={() => setPreviewOpen(true)}
-        className={cn(
-          "w-full overflow-x-auto rounded-lg",
-          "flex items-center justify-center p-4",
-          "cursor-pointer transition-opacity hover:opacity-90",
-          "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
-          "[&_svg]:max-w-full [&_svg]:h-auto"
-        )}
-        aria-label="Open diagram in full-screen preview"
-      >
+      <div className="flex items-center justify-end gap-1 mb-2">
+        <div className="flex items-center gap-0.5 rounded-md border bg-muted/30 p-0.5">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            aria-label="Zoom out"
+            onClick={zoomOut}
+            disabled={zoomIndex <= 0}
+          >
+            <ZoomOut className="h-3.5 w-3.5" />
+          </Button>
+          <span className="text-xs text-muted-foreground min-w-[2.5rem] text-center tabular-nums px-1">
+            {Math.round(zoom * 100)}%
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            aria-label="Zoom in"
+            onClick={zoomIn}
+            disabled={zoomIndex >= ZOOM_LEVELS.length - 1}
+          >
+            <ZoomIn className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-7 w-7"
+            aria-label="Reset zoom"
+            onClick={resetZoom}
+          >
+            <RotateCcw className="h-3.5 w-3.5" />
+          </Button>
+        </div>
+      </div>
+      <div className="overflow-x-auto overflow-y-auto max-h-[600px] rounded-lg flex items-center justify-center p-4 [&_svg]:max-w-full [&_svg]:h-auto">
         <div
-          dangerouslySetInnerHTML={{ __html: svg }}
-          className="mermaid-container"
-        />
-      </button>
+          className="origin-center transition-transform duration-150 ease-out"
+          style={{ transform: `scale(${zoom})` }}
+        >
+          <div
+            dangerouslySetInnerHTML={{ __html: svg }}
+            className="mermaid-container"
+          />
+        </div>
+      </div>
       {caption && (
         <p className="mt-2 text-center text-sm text-muted-foreground italic">
           {caption}
         </p>
       )}
-      <MermaidPreviewModal
-        open={previewOpen}
-        onOpenChange={setPreviewOpen}
-        svgContent={svg}
-        caption={caption}
-      />
     </div>
   );
 }
-
-
