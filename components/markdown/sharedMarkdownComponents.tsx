@@ -1,22 +1,26 @@
 "use client";
 
+import * as React from "react";
 import { cn } from "@/lib/utils";
 import { MermaidBlock } from "./MermaidBlock";
 
 /**
  * Shared markdown components for consistent rendering across all doc-displaying pages.
- * Use MermaidBlock (with click-to-preview modal and zoom) everywhere.
  */
 export const sharedMarkdownComponents = {
-  pre: ({ children, ...props }: any) => {
-    const childClass =
-      (props as any)?.children?.props?.className ||
-      (Array.isArray(children) && (children as any)[0]?.props?.className) ||
-      "";
-    const isMermaid = childClass.includes("language-mermaid");
+  pre: ({ node, children, ...props }: any) => {
+    // Detect mermaid from AST (node) or from wrapper (code returns div with data-mermaid-block)
+    const codeNode = node?.children?.[0];
+    const astClass = Array.isArray(codeNode?.properties?.className)
+      ? codeNode.properties.className.join(" ")
+      : codeNode?.properties?.className || "";
+    const firstChild = React.Children.toArray(children)[0] as React.ReactElement | undefined;
+    const isMermaid =
+      astClass.includes("language-mermaid") ||
+      firstChild?.props?.["data-mermaid-block"] === true;
 
     if (isMermaid) {
-      return <div className="not-prose my-6">{children}</div>;
+      return <>{children}</>;
     }
 
     return (
@@ -35,7 +39,11 @@ export const sharedMarkdownComponents = {
     const text = String(children ?? "").replace(/\n$/, "");
     const match = /language-(\w+)/.exec(className || "");
     if (match?.[1] === "mermaid") {
-      return <MermaidBlock code={text} />;
+      return (
+        <div data-mermaid-block>
+          <MermaidBlock code={text} />
+        </div>
+      );
     }
     return (
       <code

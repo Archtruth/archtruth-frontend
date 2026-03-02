@@ -151,9 +151,9 @@ export function MermaidBlock({ code, caption }: { code: string; caption?: string
   }
 
   return (
-    <div className="my-6">
-      <div className="flex items-center justify-end gap-1 mb-2">
-        <div className="flex items-center gap-0.5 rounded-md border bg-muted/30 p-0.5">
+    <div className="my-2">
+      <div className="flex items-center justify-end gap-1 mb-1">
+        <div className="flex items-center gap-0.5 rounded p-0.5">
           <Button
             variant="ghost"
             size="icon"
@@ -188,7 +188,7 @@ export function MermaidBlock({ code, caption }: { code: string; caption?: string
           </Button>
         </div>
       </div>
-      <div className="overflow-x-auto overflow-y-auto max-h-[600px] rounded-lg flex items-center justify-center p-4 [&_svg]:max-w-full [&_svg]:h-auto">
+      <div className="overflow-x-auto overflow-y-auto max-h-[600px] flex items-center justify-center [&_svg]:max-w-full [&_svg]:h-auto">
         <div
           className="origin-center transition-transform duration-150 ease-out"
           style={{ transform: `scale(${zoom})` }}
@@ -200,7 +200,7 @@ export function MermaidBlock({ code, caption }: { code: string; caption?: string
         </div>
       </div>
       {caption && (
-        <p className="mt-2 text-center text-sm text-muted-foreground italic">
+        <p className="mt-1 text-center text-sm text-muted-foreground italic">
           {caption}
         </p>
       )}
