@@ -6,6 +6,7 @@ import { cn } from "@/lib/utils";
 type Heading = {
   title: string;
   id: string;
+  level: number;
 };
 
 function generateAnchorId(title: string): string {
@@ -28,11 +29,17 @@ function extractHeadings(markdown: string): Heading[] {
   }
 
   const headings: Heading[] = [];
+  const seen = new Set<string>();
   for (const line of content.split("\n")) {
-    const match = line.match(/^##\s+(.+)$/);
+    const match = line.match(/^(#{2,3})\s+(.+)$/);
     if (match) {
-      const title = match[1].trim();
-      headings.push({ title, id: generateAnchorId(title) });
+      const level = match[1].length;
+      const title = match[2].trim();
+      const id = generateAnchorId(title);
+      if (!seen.has(id)) {
+        seen.add(id);
+        headings.push({ title, id, level });
+      }
     }
   }
   return headings;
@@ -109,7 +116,9 @@ export function TableOfContents({ markdown }: { markdown: string }) {
             href={`#${heading.id}`}
             onClick={(e) => handleClick(heading.id, e)}
             className={cn(
-              "block py-1 text-sm transition-colors border-l-2 -ml-px pl-0",
+              "block py-1 text-sm transition-colors border-l-2 -ml-px",
+              heading.level === 3 ? "pl-3" : "pl-0",
+              heading.level === 2 && "font-medium",
               activeId === heading.id
                 ? "border-primary text-primary font-medium"
                 : "border-transparent text-muted-foreground hover:text-foreground hover:border-border"
