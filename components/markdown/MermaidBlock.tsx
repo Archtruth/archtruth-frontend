@@ -3,12 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import { cn } from "@/lib/utils";
 import { AlertCircle, Loader2 } from "lucide-react";
+import { MermaidPreviewModal } from "./MermaidPreviewModal";
 
 export function MermaidBlock({ code, caption }: { code: string; caption?: string }) {
   const [svg, setSvg] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [isLoading, setIsLoading] = useState(true);
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const id = useMemo(() => `mmd-${Math.random().toString(36).slice(2)}`, []);
 
@@ -144,23 +146,34 @@ export function MermaidBlock({ code, caption }: { code: string; caption?: string
 
   return (
     <div className="my-6">
-      <div
+      <button
+        type="button"
+        onClick={() => setPreviewOpen(true)}
         className={cn(
-          "overflow-x-auto rounded-lg border bg-card p-4",
-          "flex items-center justify-center",
+          "w-full overflow-x-auto rounded-lg",
+          "flex items-center justify-center p-4",
+          "cursor-pointer transition-opacity hover:opacity-90",
+          "focus:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2",
           "[&_svg]:max-w-full [&_svg]:h-auto"
         )}
+        aria-label="Open diagram in full-screen preview"
       >
         <div
           dangerouslySetInnerHTML={{ __html: svg }}
           className="mermaid-container"
         />
-      </div>
+      </button>
       {caption && (
         <p className="mt-2 text-center text-sm text-muted-foreground italic">
           {caption}
         </p>
       )}
+      <MermaidPreviewModal
+        open={previewOpen}
+        onOpenChange={setPreviewOpen}
+        svgContent={svg}
+        caption={caption}
+      />
     </div>
   );
 }

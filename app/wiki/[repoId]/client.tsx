@@ -9,7 +9,7 @@ import { FileText, ChevronLeft, Calendar, Loader, BookOpen, Search, ChevronRight
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
-import { MermaidBlock } from "@/components/markdown/MermaidBlock";
+import { sharedMarkdownComponents } from "@/components/markdown/sharedMarkdownComponents";
 import { TableOfContents } from "@/components/wiki/TableOfContents";
 import { Input } from "@/components/ui/input";
 import {
@@ -751,39 +751,68 @@ export function FullScreenWikiClient({
                             </h4>
                           );
                         },
-                        pre: ({ children, ...props }) => {
-                          const childClass =
-                            (props as any)?.children?.props?.className ||
-                            (Array.isArray(children) && (children as any)[0]?.props?.className) ||
-                            "";
-                          const isMermaid = childClass.includes("language-mermaid");
-
-                          if (isMermaid) {
-                            return <div className="not-prose my-6">{children}</div>;
+                        ...sharedMarkdownComponents,
+                        a: ({ href, children, ...props }) => {
+                          const h = href || "";
+                          if (h.startsWith("wiki:")) {
+                            const target = h.slice("wiki:".length);
+                            const withRepo = target.includes("/");
+                            const [repoPart, slugPart] = withRepo ? target.split("/") : [null, target];
+                            const slug = slugPart ?? target;
+                            if (repoPart) {
+                              const otherRepoId = parseInt(repoPart, 10);
+                              if (!isNaN(otherRepoId) && otherRepoId !== repoId && orgId) {
+                                return (
+                                  <Link
+                                    href={`/wiki?org_id=${encodeURIComponent(orgId)}&repo=${otherRepoId}&module=${encodeURIComponent(slug)}`}
+                                    className="text-primary underline underline-offset-4 hover:opacity-90"
+                                  >
+                                    {children}
+                                  </Link>
+                                );
+                              }
+                            }
+                            const modulePage = pages.find((p) => p.slug === slug);
+                            if (modulePage) {
+                              const topName = slug.split("/")[0];
+                              return (
+                                <button
+                                  type="button"
+                                  className="text-primary underline underline-offset-4 hover:opacity-90"
+                                  onClick={() => handleSelectModule(topName, slug)}
+                                >
+                                  {children}
+                                </button>
+                              );
+                            }
                           }
-
+                          if (h.startsWith("code:")) {
+                            const filePath = h.slice("code:".length);
+                            return (
+                              <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400">
+                                <Code className="h-3 w-3 inline flex-shrink-0" />
+                                <code className="text-sm bg-muted/50 px-1 py-0.5 rounded">{filePath}</code>
+                              </span>
+                            );
+                          }
+                          const isCodeLink = h.includes("/blob/") || h.includes("/-/blob/") || h.includes("/src/");
                           return (
-                            <pre
+                            <a
+                              href={h}
                               {...props}
+                              target="_blank"
+                              rel="noreferrer"
                               className={cn(
-                                "not-prose my-4 rounded-md border bg-muted/50 p-4 overflow-x-auto text-sm",
-                                (props as any)?.className
+                                "underline underline-offset-4 hover:opacity-90",
+                                isCodeLink
+                                  ? "text-blue-600 dark:text-blue-400 inline-flex items-center gap-1"
+                                  : "text-primary"
                               )}
                             >
+                              {isCodeLink && <Code className="h-3 w-3 inline flex-shrink-0" />}
                               {children}
-                            </pre>
-                          );
-                        },
-                        code: ({ className, children, ...props }: any) => {
-                          const text = String(children ?? "").replace(/\n$/, "");
-                          const match = /language-(\w+)/.exec(className || "");
-                          if (match?.[1] === "mermaid") {
-                            return <MermaidBlock code={text} />;
-                          }
-                          return (
-                            <code className={cn("bg-muted/50 px-1.5 py-0.5 rounded text-sm", className)} {...props}>
-                              {children}
-                            </code>
+                              {isCodeLink && <ExternalLink className="h-3 w-3 inline flex-shrink-0 opacity-50" />}
+                            </a>
                           );
                         },
                       }}
@@ -843,41 +872,7 @@ export function FullScreenWikiClient({
                             </h4>
                           );
                         },
-                        pre: ({ children, ...props }) => {
-                          const childClass =
-                            (props as any)?.children?.props?.className ||
-                            (Array.isArray(children) && (children as any)[0]?.props?.className) ||
-                            "";
-                          const isMermaid = childClass.includes("language-mermaid");
-
-                          if (isMermaid) {
-                            return <div className="not-prose my-6">{children}</div>;
-                          }
-
-                          return (
-                            <pre
-                              {...props}
-                              className={cn(
-                                "not-prose my-4 rounded-md border bg-muted/50 p-4 overflow-x-auto text-sm",
-                                (props as any)?.className
-                              )}
-                            >
-                              {children}
-                            </pre>
-                          );
-                        },
-                        code: ({ className, children, ...props }: any) => {
-                          const text = String(children ?? "").replace(/\n$/, "");
-                          const match = /language-(\w+)/.exec(className || "");
-                          if (match?.[1] === "mermaid") {
-                            return <MermaidBlock code={text} />;
-                          }
-                          return (
-                            <code className={cn("bg-muted/50 px-1.5 py-0.5 rounded text-sm", className)} {...props}>
-                              {children}
-                            </code>
-                          );
-                        },
+                        ...sharedMarkdownComponents,
                         a: ({ href, children, ...props }) => {
                           const h = href || "";
                           if (h.startsWith("wiki:")) {

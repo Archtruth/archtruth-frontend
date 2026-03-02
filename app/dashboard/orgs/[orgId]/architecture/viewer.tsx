@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText, Loader, Network, ChevronLeft } from "lucide-react";
 import { presignOrgDocument } from "@/lib/api/backend-client";
-import { MermaidBlock } from "@/components/markdown/MermaidBlock";
+import { sharedMarkdownComponents } from "@/components/markdown/sharedMarkdownComponents";
 
 type Document = {
   id: number;
@@ -94,20 +94,7 @@ export default function ArchitectureClient({ orgId, token, docs }: { orgId: stri
           ) : (
             <article className="prose dark:prose-invert max-w-none">
               <ReactMarkdown
-                components={{
-                  code: ({ className, children, ...props }: any) => {
-                    const text = String(children ?? "").replace(/\n$/, "");
-                    const match = /language-(\w+)/.exec(className || "");
-                    if (match?.[1] === "mermaid") {
-                      return <MermaidBlock code={text} />;
-                    }
-                    return (
-                      <code className={className} {...props}>
-                        {children}
-                      </code>
-                    );
-                  },
-                }}
+                components={sharedMarkdownComponents}
               >
                 {markdown}
               </ReactMarkdown>

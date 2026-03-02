@@ -9,7 +9,7 @@ import { FileText, ChevronLeft, Calendar, Loader, BookOpen, Search, ChevronRight
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
-import { MermaidBlock } from "@/components/markdown/MermaidBlock";
+import { sharedMarkdownComponents } from "@/components/markdown/sharedMarkdownComponents";
 import { TableOfContents } from "@/components/wiki/TableOfContents";
 import { Input } from "@/components/ui/input";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -483,22 +483,7 @@ export function OrgWikiClient({
           </h4>
         );
       },
-      pre: ({ children, ...props }: any) => {
-        const childClass = (props as any)?.children?.props?.className || (Array.isArray(children) && (children as any)[0]?.props?.className) || "";
-        const isMermaid = childClass.includes("language-mermaid");
-        if (isMermaid) return <div className="not-prose my-6">{children}</div>;
-        return (
-          <pre {...props} className={cn("not-prose my-4 rounded-md border bg-muted/50 p-4 overflow-x-auto text-sm", (props as any)?.className)}>
-            {children}
-          </pre>
-        );
-      },
-      code: ({ className, children, ...props }: any) => {
-        const text = String(children ?? "").replace(/\n$/, "");
-        const match = /language-(\w+)/.exec(className || "");
-        if (match?.[1] === "mermaid") return <MermaidBlock code={text} />;
-        return <code className={cn("bg-muted/50 px-1.5 py-0.5 rounded text-sm", className)} {...props}>{children}</code>;
-      },
+      ...sharedMarkdownComponents,
       a: ({ href, children, ...props }: any) => {
         const h = href || "";
         if (h.startsWith("wiki:")) {

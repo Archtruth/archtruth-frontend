@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { MermaidBlock } from "@/components/markdown/MermaidBlock";
+import { sharedMarkdownComponents } from "@/components/markdown/sharedMarkdownComponents";
 
 type Citation = {
   doc_id?: number;
@@ -334,20 +334,7 @@ export function ChatClient({
                       {m.role === "assistant" ? (
                           <div className="prose prose-sm dark:prose-invert max-w-none">
                             <ReactMarkdown
-                              components={{
-                                code: ({ className, children, ...props }: any) => {
-                                  const text = String(children ?? "").replace(/\n$/, "");
-                                  const match = /language-(\w+)/.exec(className || "");
-                                  if (match?.[1] === "mermaid") {
-                                    return <MermaidBlock code={text} />;
-                                  }
-                                  return (
-                                    <code className={className} {...props}>
-                                      {children}
-                                    </code>
-                                  );
-                                },
-                              }}
+                              components={sharedMarkdownComponents}
                             >
                               {m.content}
                             </ReactMarkdown>

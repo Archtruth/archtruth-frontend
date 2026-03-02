@@ -9,7 +9,7 @@ import { FileText, ChevronLeft, Calendar, Loader, BookOpen, Menu, Search, List, 
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { cn } from "@/lib/utils";
-import { MermaidBlock } from "@/components/markdown/MermaidBlock";
+import { sharedMarkdownComponents } from "@/components/markdown/sharedMarkdownComponents";
 import { Input } from "@/components/ui/input";
 import {
   Popover,
@@ -446,29 +446,7 @@ export function RepoWikiPageClient({
                               const id = props.children?.toString().toLowerCase().replace(/[^\w]+/g, '-') || '';
                               return <h3 id={id} {...props} />;
                             },
-                            pre: ({ children, ...props }) => {
-                              const childClass =
-                                (props as any)?.children?.props?.className || (Array.isArray(children) && (children as any)[0]?.props?.className) || "";
-                              const isMermaid = childClass.includes("language-mermaid");
-
-                              // For mermaid, let the diagram render cleanly without padded/light container.
-                              if (isMermaid) {
-                                return <div className="not-prose my-4">{children}</div>;
-                              }
-
-                              // Default code fences: light-mode styled block with scroll.
-                              return (
-                                <pre
-                                  {...props}
-                                  className={cn(
-                                    "not-prose my-4 rounded-md border bg-white text-black p-3 overflow-x-auto text-sm",
-                                    (props as any)?.className
-                                  )}
-                                >
-                                  {children}
-                                </pre>
-                              );
-                            },
+                            ...sharedMarkdownComponents,
                             a: ({ href, children, ...props }) => {
                               const h = href || "";
                               // Wiki internal links
@@ -513,18 +491,6 @@ export function RepoWikiPageClient({
                                   {children}
                                   {isCodeLink && <ExternalLink className="h-3 w-3 inline flex-shrink-0 opacity-50" />}
                                 </a>
-                              );
-                            },
-                            code: ({ className, children, ...props }: any) => {
-                              const text = String(children ?? "").replace(/\n$/, "");
-                              const match = /language-(\w+)/.exec(className || "");
-                              if (match?.[1] === "mermaid") {
-                                return <MermaidBlock code={text} />;
-                              }
-                              return (
-                                <code className={className} {...props}>
-                                  {children}
-                                </code>
                               );
                             },
                           }}
