@@ -67,7 +67,13 @@ export async function GET(request: NextRequest) {
   const response = NextResponse.redirect(data.url);
 
   cookiesToSet.forEach(({ name, value, options }) => {
-    response.cookies.set({ name, value, ...options });
+    // Ensure code_verifier and auth cookies use SameSite=Lax so they are sent when
+    // the user is redirected back from GitHub (cross-site top-level navigation).
+    const cookieOptions =
+      name.includes("code-verifier") || name.includes("auth-token")
+        ? { ...options, sameSite: "lax" as const }
+        : options;
+    response.cookies.set({ name, value, ...cookieOptions });
   });
 
   return response;

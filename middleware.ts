@@ -45,7 +45,9 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Match all paths except static files
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    // Match all paths except static files and auth routes.
+    // Exclude /auth/login and /auth/callback so middleware does not interfere with
+    // the PKCE code_verifier cookie during OAuth redirects (cross-site from GitHub).
+    "/((?!_next/static|_next/image|favicon.ico|auth/login|auth/callback|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
