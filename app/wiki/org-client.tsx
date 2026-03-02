@@ -88,14 +88,17 @@ function toHeadingId(text: string): string {
 function extractSectionNav(markdown: string): SectionNavItem[] {
   if (!markdown) return [];
   const out: SectionNavItem[] = [];
+  const seen = new Set<string>();
   for (const raw of markdown.split("\n")) {
     const line = raw.trim();
-    const m = /^(##)\s+(.+)$/.exec(line);
+    const m = /^(#{2,3})\s+(.+)$/.exec(line);
     if (!m) continue;
+    const level = m[1].length;
     const title = m[2].trim();
     const id = toHeadingId(title);
-    if (!id) continue;
-    out.push({ id, title, level: 2 });
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    out.push({ id, title, level });
   }
   return out;
 }
@@ -714,7 +717,11 @@ export function OrgWikiClient({
                                         const target = document.getElementById(section.id);
                                         if (target) target.scrollIntoView({ behavior: "smooth", block: "start" });
                                       }}
-                                      className="w-full text-left text-xs rounded px-2 py-1 hover:bg-muted/60 text-foreground/80"
+                                      className={cn(
+                                        "w-full text-left text-xs rounded px-2 py-1 hover:bg-muted/60 text-foreground/80",
+                                        section.level === 2 && "font-semibold",
+                                        section.level === 3 && "pl-4"
+                                      )}
                                     >
                                       {section.title}
                                     </button>
