@@ -5,7 +5,7 @@ import { AlertCircle, Loader2, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 const ZOOM_LEVELS = [0.5, 0.75, 1, 1.25, 1.5, 2, 2.5, 3];
-const DEFAULT_ZOOM_INDEX = 2; // 1x
+const DEFAULT_ZOOM_INDEX = 5; // 2x (200%)
 
 export function MermaidBlock({ code, caption }: { code: string; caption?: string }) {
   const [svg, setSvg] = useState<string>("");
@@ -116,6 +116,7 @@ export function MermaidBlock({ code, caption }: { code: string; caption?: string
                 tertiaryColor: "#4b5563",
                 textColor: "#e5e7eb",
                 fontFamily: "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial",
+                fontSize: "18px",
               },
             }
           : {
@@ -131,6 +132,7 @@ export function MermaidBlock({ code, caption }: { code: string; caption?: string
                 tertiaryColor: "#e5e7eb",
                 textColor: "#111827",
                 fontFamily: "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial",
+                fontSize: "18px",
               },
             };
 
@@ -197,7 +199,7 @@ export function MermaidBlock({ code, caption }: { code: string; caption?: string
   }
 
   return (
-    <div className="my-2">
+    <div className="my-2 min-w-0 w-full">
       <div className="flex items-center justify-end gap-1 mb-1">
         <div className="flex items-center gap-0.5 rounded p-0.5">
           <Button
@@ -236,7 +238,7 @@ export function MermaidBlock({ code, caption }: { code: string; caption?: string
       </div>
       <div
         ref={containerRef}
-        className="overflow-x-auto overflow-y-auto max-h-[600px] [&_svg]:max-w-full [&_svg]:h-auto"
+        className="overflow-x-auto overflow-y-auto [&_svg]:max-w-full [&_svg]:h-auto"
       >
         <div
           ref={scaledRef}
