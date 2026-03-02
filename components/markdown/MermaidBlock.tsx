@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useCallback } from "react";
-import { cn } from "@/lib/utils";
+import { useEffect, useMemo, useState, useCallback, useRef } from "react";
 import { AlertCircle, Loader2, ZoomIn, ZoomOut, RotateCcw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
@@ -14,20 +13,53 @@ export function MermaidBlock({ code, caption }: { code: string; caption?: string
   const [isLoading, setIsLoading] = useState(true);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
+  const [transformOrigin, setTransformOrigin] = useState<string>("50% 50%");
 
   const id = useMemo(() => `mmd-${Math.random().toString(36).slice(2)}`, []);
   const zoom = ZOOM_LEVELS[zoomIndex];
 
   const zoomIn = useCallback(() => {
+    setTransformOrigin("50% 50%");
     setZoomIndex((i) => Math.min(i + 1, ZOOM_LEVELS.length - 1));
   }, []);
 
   const zoomOut = useCallback(() => {
+    setTransformOrigin("50% 50%");
     setZoomIndex((i) => Math.max(i - 1, 0));
   }, []);
 
   const resetZoom = useCallback(() => {
+    setTransformOrigin("50% 50%");
     setZoomIndex(DEFAULT_ZOOM_INDEX);
+  }, []);
+
+  const containerRef = useRef<HTMLDivElement>(null);
+  const scaledRef = useRef<HTMLDivElement>(null);
+  const zoomRef = useRef(zoom);
+  zoomRef.current = zoom;
+
+  // Trackpad pinch zoom (ctrlKey/metaKey + wheel) - zoom toward cursor
+  useEffect(() => {
+    const container = containerRef.current;
+    const scaled = scaledRef.current;
+    if (!container || !scaled) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        const rect = scaled.getBoundingClientRect();
+        const currentZoom = zoomRef.current;
+        // Cursor position in scaled element's pre-transform coordinate space
+        const originX = (e.clientX - rect.left) / currentZoom;
+        const originY = (e.clientY - rect.top) / currentZoom;
+        setTransformOrigin(`${originX}px ${originY}px`);
+        if (e.deltaY < 0) setZoomIndex((i) => Math.min(i + 1, ZOOM_LEVELS.length - 1));
+        else if (e.deltaY > 0) setZoomIndex((i) => Math.max(i - 1, 0));
+      }
+    };
+
+    container.addEventListener("wheel", handleWheel, { passive: false });
+    return () => container.removeEventListener("wheel", handleWheel);
   }, []);
 
   // Match page theme: only use document class, not system preference
@@ -188,10 +220,17 @@ export function MermaidBlock({ code, caption }: { code: string; caption?: string
           </Button>
         </div>
       </div>
-      <div className="overflow-x-auto overflow-y-auto max-h-[600px] flex items-center justify-center [&_svg]:max-w-full [&_svg]:h-auto">
+      <div
+        ref={containerRef}
+        className="overflow-x-auto overflow-y-auto max-h-[600px] flex items-center justify-center [&_svg]:max-w-full [&_svg]:h-auto"
+      >
         <div
-          className="origin-center transition-transform duration-150 ease-out"
-          style={{ transform: `scale(${zoom})` }}
+          ref={scaledRef}
+          className="transition-transform duration-150 ease-out"
+          style={{
+            transformOrigin: transformOrigin,
+            transform: `scale(${zoom})`,
+          }}
         >
           <div
             dangerouslySetInnerHTML={{ __html: svg }}
