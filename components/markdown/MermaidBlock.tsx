@@ -13,32 +13,32 @@ export function MermaidBlock({ code, caption }: { code: string; caption?: string
   const [isLoading, setIsLoading] = useState(true);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const [zoomIndex, setZoomIndex] = useState(DEFAULT_ZOOM_INDEX);
-  const [transformOrigin, setTransformOrigin] = useState<string>("50% 50%");
+  const [translate, setTranslate] = useState({ x: 0, y: 0 });
 
   const id = useMemo(() => `mmd-${Math.random().toString(36).slice(2)}`, []);
   const zoom = ZOOM_LEVELS[zoomIndex];
 
   const zoomIn = useCallback(() => {
-    setTransformOrigin("50% 50%");
+    setTranslate({ x: 0, y: 0 });
     setZoomIndex((i) => Math.min(i + 1, ZOOM_LEVELS.length - 1));
   }, []);
 
   const zoomOut = useCallback(() => {
-    setTransformOrigin("50% 50%");
+    setTranslate({ x: 0, y: 0 });
     setZoomIndex((i) => Math.max(i - 1, 0));
   }, []);
 
   const resetZoom = useCallback(() => {
-    setTransformOrigin("50% 50%");
+    setTranslate({ x: 0, y: 0 });
     setZoomIndex(DEFAULT_ZOOM_INDEX);
   }, []);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const scaledRef = useRef<HTMLDivElement>(null);
-  const zoomRef = useRef(zoom);
-  zoomRef.current = zoom;
+  const stateRef = useRef({ zoomIndex, translate: { x: 0, y: 0 } });
+  stateRef.current = { zoomIndex, translate };
 
-  // Trackpad pinch zoom (ctrlKey/metaKey + wheel) - zoom toward cursor
+  // Trackpad pinch zoom (ctrlKey/metaKey + wheel) - zoom toward cursor using translate
   useEffect(() => {
     const container = containerRef.current;
     const scaled = scaledRef.current;
@@ -47,14 +47,28 @@ export function MermaidBlock({ code, caption }: { code: string; caption?: string
     const handleWheel = (e: WheelEvent) => {
       if (e.ctrlKey || e.metaKey) {
         e.preventDefault();
-        const rect = scaled.getBoundingClientRect();
-        const currentZoom = zoomRef.current;
-        // Cursor position in scaled element's pre-transform coordinate space
-        const originX = (e.clientX - rect.left) / currentZoom;
-        const originY = (e.clientY - rect.top) / currentZoom;
-        setTransformOrigin(`${originX}px ${originY}px`);
-        if (e.deltaY < 0) setZoomIndex((i) => Math.min(i + 1, ZOOM_LEVELS.length - 1));
-        else if (e.deltaY > 0) setZoomIndex((i) => Math.max(i - 1, 0));
+        const { zoomIndex: zi, translate: t } = stateRef.current;
+        const currentZoom = ZOOM_LEVELS[zi];
+        const containerRect = container.getBoundingClientRect();
+        // Cursor position in container's scroll coordinate space
+        const cursorX = e.clientX - containerRect.left + container.scrollLeft;
+        const cursorY = e.clientY - containerRect.top + container.scrollTop;
+        // Point in content under cursor (content uses transform-origin 0 0)
+        const contentX = (cursorX - t.x) / currentZoom;
+        const contentY = (cursorY - t.y) / currentZoom;
+
+        let newZi = zi;
+        if (e.deltaY < 0) newZi = Math.min(zi + 1, ZOOM_LEVELS.length - 1);
+        else if (e.deltaY > 0) newZi = Math.max(zi - 1, 0);
+
+        const newZoom = ZOOM_LEVELS[newZi];
+        // New translate so content point stays under cursor
+        const newTx = cursorX - contentX * newZoom;
+        const newTy = cursorY - contentY * newZoom;
+
+        stateRef.current = { zoomIndex: newZi, translate: { x: newTx, y: newTy } };
+        setZoomIndex(newZi);
+        setTranslate({ x: newTx, y: newTy });
       }
     };
 
@@ -222,14 +236,14 @@ export function MermaidBlock({ code, caption }: { code: string; caption?: string
       </div>
       <div
         ref={containerRef}
-        className="overflow-x-auto overflow-y-auto max-h-[600px] flex items-center justify-center [&_svg]:max-w-full [&_svg]:h-auto"
+        className="overflow-x-auto overflow-y-auto max-h-[600px] [&_svg]:max-w-full [&_svg]:h-auto"
       >
         <div
           ref={scaledRef}
-          className="transition-transform duration-150 ease-out"
+          className="inline-block transition-transform duration-150 ease-out"
           style={{
-            transformOrigin: transformOrigin,
-            transform: `scale(${zoom})`,
+            transformOrigin: "0 0",
+            transform: `translate(${translate.x}px, ${translate.y}px) scale(${zoom})`,
           }}
         >
           <div
