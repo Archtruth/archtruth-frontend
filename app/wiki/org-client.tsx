@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState, useCallback } from "react";
+import { toast } from "sonner";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { presignWikiPage, presignOrgDocument } from "@/lib/api/backend";
@@ -117,18 +118,29 @@ async function fetchOrgDocContent(orgId: string, fileName: string, token: string
   return resp.text();
 }
 
+type CapabilityNode = {
+  id: string;
+  name: string;
+  description?: string;
+  level: number;
+  children: CapabilityNode[];
+  services: { repository_id: number; nav_order: number }[];
+};
+
 export function OrgWikiClient({
   orgId,
   token,
   backHref,
   orgDocs,
   repos,
+  capabilities = [],
 }: {
   orgId: string;
   token: string;
   backHref: string;
   orgDocs: OrgDoc[];
   repos: RepoWithPages[];
+  capabilities?: CapabilityNode[];
 }) {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -167,6 +179,27 @@ export function OrgWikiClient({
     }
     return new Set();
   });
+
+  const [expandedCapabilities, setExpandedCapabilities] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set();
+    try {
+      const stored = sessionStorage.getItem("wiki-org-expanded-caps");
+      if (stored) return new Set(JSON.parse(stored) as string[]);
+    } catch { /* ignore */ }
+    return new Set();
+  });
+
+  const toggleCapabilityExpanded = useCallback((capId: string) => {
+    setExpandedCapabilities((prev) => {
+      const next = new Set(prev);
+      if (next.has(capId)) next.delete(capId);
+      else next.add(capId);
+      try {
+        sessionStorage.setItem("wiki-org-expanded-caps", JSON.stringify([...next]));
+      } catch { /* ignore */ }
+      return next;
+    });
+  }, []);
 
   const toggleRepoExpanded = useCallback((repoId: number) => {
     setExpandedRepos((prev) => {
@@ -319,31 +352,33 @@ export function OrgWikiClient({
   }, [selectedRepoId]);
 
   useEffect(() => {
+    let cancelled = false;
     if (selectedType === "org-doc" && selectedOrgDoc) {
       setLoading(true);
       fetchOrgDocContent(orgId, selectedOrgDoc, token)
-        .then((content) => {
-          setMarkdown(content);
-          setLoading(false);
-        })
+        .then((content) => { if (!cancelled) setMarkdown(content); })
         .catch((e) => {
-          console.error("Failed to load org doc:", e);
-          setMarkdown("Failed to load document.");
-          setLoading(false);
-        });
+          if (!cancelled) {
+            console.error("Failed to load org doc:", e);
+            setMarkdown("Failed to load document.");
+            toast.error("Failed to load document.");
+          }
+        })
+        .finally(() => { if (!cancelled) setLoading(false); });
     } else if (selectedType === "module" && selectedRepoId && selectedModule) {
       setLoading(true);
       fetchWikiContent(selectedRepoId, selectedModule, token)
-        .then((content) => {
-          setMarkdown(content);
-          setLoading(false);
-        })
+        .then((content) => { if (!cancelled) setMarkdown(content); })
         .catch((e) => {
-          console.error("Failed to load wiki page:", e);
-          setMarkdown("Failed to load wiki page.");
-          setLoading(false);
-        });
+          if (!cancelled) {
+            console.error("Failed to load wiki page:", e);
+            setMarkdown("Failed to load wiki page.");
+            toast.error("Failed to load wiki page.");
+          }
+        })
+        .finally(() => { if (!cancelled) setLoading(false); });
     }
+    return () => { cancelled = true; };
   }, [selectedType, selectedOrgDoc, selectedRepoId, selectedModule, orgId, token]);
 
   const handleSelectOrgDoc = useCallback(
@@ -539,7 +574,7 @@ export function OrgWikiClient({
   );
 
   return (
-    <div className="fixed inset-0 flex flex-col bg-background">
+    <div className="flex flex-col min-h-screen bg-background">
       <div className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur">
         <div className="flex items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
@@ -655,6 +690,97 @@ export function OrgWikiClient({
                   })}
               </div>
             )}
+
+            {capabilities.length > 0 && (() => {
+              const findRepoFirstSlug = (repoId: number): string | null => {
+                const repo = repos.find((r) => r.id === repoId);
+                if (!repo) return null;
+                const tree = repoNavTrees.get(repoId) || [];
+                const leaf = findFirstLeaf(tree);
+                return leaf?.slug ?? null;
+              };
+
+              const renderCapabilityNode = (node: CapabilityNode, depth: number): React.ReactNode => {
+                const hasChildren = node.children.length > 0;
+                const hasServices = node.services.length > 0;
+                const isExpandable = hasChildren || hasServices;
+                const isExpanded = expandedCapabilities.has(node.id);
+                const indent = depth * 12;
+
+                return (
+                  <div key={node.id} className="space-y-0.5">
+                    <div
+                      className={cn(
+                        "flex items-center gap-2 px-3 py-1.5 rounded-md border transition-colors text-sm",
+                        isExpandable ? "cursor-pointer border-transparent hover:border-border hover:bg-muted/40" : "border-transparent"
+                      )}
+                      style={{ paddingLeft: `${indent + 8}px` }}
+                      onClick={() => isExpandable && toggleCapabilityExpanded(node.id)}
+                    >
+                      {isExpandable ? (
+                        <button
+                          type="button"
+                          className="p-0.5 -m-0.5 rounded hover:bg-muted/80 flex-shrink-0"
+                          onClick={(e) => { e.stopPropagation(); toggleCapabilityExpanded(node.id); }}
+                          aria-label={isExpanded ? "Collapse" : "Expand"}
+                        >
+                          {isExpanded ? (
+                            <ChevronDown className="h-3.5 w-3.5 text-muted-foreground" />
+                          ) : (
+                            <ChevronRight className="h-3.5 w-3.5 text-muted-foreground" />
+                          )}
+                        </button>
+                      ) : (
+                        <span className="w-4 flex-shrink-0" />
+                      )}
+                      <Folder className="h-3.5 w-3.5 text-muted-foreground flex-shrink-0" />
+                      <span className="flex-1 truncate font-medium text-foreground/90">{node.name}</span>
+                    </div>
+                    {isExpanded && (
+                      <div className={cn("space-y-0.5", depth === 0 ? "ml-4 border-l border-border/50 pl-1" : "")}>
+                        {node.children.map((child) => renderCapabilityNode(child, depth + 1))}
+                        {node.services
+                          .sort((a, b) => a.nav_order - b.nav_order)
+                          .map((svc) => {
+                            const repo = repos.find((r) => r.id === svc.repository_id);
+                            if (!repo) return null;
+                            const shortName = getRepoShortName(repo.full_name);
+                            const firstSlug = findRepoFirstSlug(svc.repository_id);
+                            const isSelected = selectedRepoId === svc.repository_id;
+                            return (
+                              <button
+                                key={`${node.id}-svc-${svc.repository_id}`}
+                                onClick={() => firstSlug && handleSelectModule(svc.repository_id, firstSlug)}
+                                style={{ paddingLeft: `${(depth + 1) * 12 + 12}px` }}
+                                className={cn(
+                                  "w-full text-left px-3 py-1.5 rounded-md border transition-colors text-sm",
+                                  isSelected
+                                    ? "border-primary/70 bg-primary/10 text-primary shadow-sm"
+                                    : "border-transparent hover:border-border hover:bg-muted/70 text-foreground/80 hover:text-foreground"
+                                )}
+                              >
+                                <div className="flex items-center gap-2">
+                                  <Code className="h-3.5 w-3.5 flex-shrink-0" />
+                                  <span className="truncate">{shortName}</span>
+                                </div>
+                              </button>
+                            );
+                          })}
+                      </div>
+                    )}
+                  </div>
+                );
+              };
+
+              return (
+                <div className="space-y-1">
+                  <div className="px-2 py-1 border-b border-border/40 mb-2">
+                    <h2 className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Capabilities</h2>
+                  </div>
+                  {capabilities.map((cap) => renderCapabilityNode(cap, 0))}
+                </div>
+              );
+            })()}
 
             {repos.length > 0 && (
               <div className="space-y-2">

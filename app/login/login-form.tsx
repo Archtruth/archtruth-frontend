@@ -6,19 +6,20 @@ import { Button } from "@/components/ui/button";
 type LoginFormProps = {
   variant?: "page" | "embedded";
   error?: string | null;
+  /** Optional override: called instead of the default window.location.href navigation. */
+  onSignIn?: () => void;
 };
 
-export function LoginForm({ variant = "page", error }: LoginFormProps) {
+export function LoginForm({ variant = "page", error, onSignIn }: LoginFormProps) {
   const [isSigningIn, setIsSigningIn] = React.useState(false);
 
   function handleSignIn() {
     if (isSigningIn) return;
+    if (onSignIn) {
+      onSignIn();
+      return;
+    }
     setIsSigningIn(true);
-    // Navigate to the server-side OAuth initiation route.
-    // This stores the PKCE code_verifier via a reliable Set-Cookie header
-    // rather than the browser client's setItemAsync(), which has a known
-    // intermittent bug where it silently fails to persist the cookie.
-    // See: https://github.com/supabase/ssr/issues/55
     window.location.href = "/auth/login";
   }
 

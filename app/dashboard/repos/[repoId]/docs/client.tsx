@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { presignDocument } from "@/lib/api/backend-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -35,21 +36,20 @@ export function RepoDocsPageClient({ repoId, token, backHref, docs }: {
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (selectedDocId && docs.length > 0) {
-      const loadDoc = async () => {
-        setLoading(true);
-        try {
-          const content = await fetchDocumentContent(Number(selectedDocId), token);
-          setMarkdown(content);
-        } catch (error) {
+    if (!selectedDocId || docs.length === 0) return;
+    let cancelled = false;
+    setLoading(true);
+    fetchDocumentContent(Number(selectedDocId), token)
+      .then((content) => { if (!cancelled) setMarkdown(content); })
+      .catch((error) => {
+        if (!cancelled) {
           console.error("Failed to load document:", error);
           setMarkdown("Failed to load document content.");
-        } finally {
-          setLoading(false);
+          toast.error("Failed to load document content.");
         }
-      };
-      loadDoc();
-    }
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [selectedDocId, token, docs]);
 
   const selectedDoc = docs.find(d => d.id.toString() === selectedDocId);

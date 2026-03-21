@@ -129,9 +129,9 @@ export async function backendFetch<T>(
       ...(init?.headers || {}),
     },
     cache: "no-store",
-    maxRetries: shouldRetry ? 3 : 0,
-    retryDelay: 3000, // 3 seconds between retries
-    timeout: 90000, // 90 seconds for cold starts (Render free tier can take 60-90s)
+    maxRetries: shouldRetry ? 1 : 0,
+    retryDelay: 2000,
+    timeout: 15000,
   });
 
   if (!resp.ok) {
@@ -176,6 +176,21 @@ export async function listOrgDocuments(orgId: string, token: string) {
 
 export async function presignOrgDocument(orgId: string, fileName: string, token: string) {
   return backendFetch<{ url: string }>(`/org-docs/${orgId}/${fileName}/presigned`, token);
+}
+
+export async function listOrgCapabilities(orgId: string, token: string) {
+  return backendFetch<{
+    capabilities: {
+      id: string;
+      name: string;
+      description?: string;
+      level: number;
+      nav_order: number;
+      parent_capability_id?: string;
+      children: any[];
+      services: { repository_id: number; nav_order: number }[];
+    }[];
+  }>(`/orgs/${orgId}/capabilities`, token);
 }
 
 export async function listWikiPages(repoId: number, token: string) {

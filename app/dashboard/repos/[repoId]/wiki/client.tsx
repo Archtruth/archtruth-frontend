@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState, useRef } from "react";
+import { toast } from "sonner";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { presignWikiPage } from "@/lib/api/backend-client";
 import { Button } from "@/components/ui/button";
@@ -109,6 +110,7 @@ export function RepoWikiPageClient({
       } catch (e) {
         console.error("Failed to load wiki page:", e);
         setMarkdown("Failed to load wiki page.");
+        toast.error("Failed to load wiki page.");
         setToc([]);
       } finally {
         setLoading(false);

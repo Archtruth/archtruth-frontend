@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { presignOrgDocument } from "@/lib/api/backend-client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { FileText, ChevronLeft, Calendar, Loader } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import { sharedMarkdownComponents } from "@/components/markdown/sharedMarkdownComponents";
+import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 
 type Document = {
   id: number;
@@ -41,27 +43,27 @@ export function OrgDocsPageClient({
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (selectedFile && docs.length > 0) {
-      const loadDoc = async () => {
-        setLoading(true);
-        try {
-          const content = await fetchDocumentContent(orgId, selectedFile, token);
-          setMarkdown(content);
-        } catch (error) {
+    if (!selectedFile || docs.length === 0) return;
+    let cancelled = false;
+    setLoading(true);
+    fetchDocumentContent(orgId, selectedFile, token)
+      .then((content) => { if (!cancelled) setMarkdown(content); })
+      .catch((error) => {
+        if (!cancelled) {
           console.error("Failed to load document:", error);
           setMarkdown("Failed to load document content.");
-        } finally {
-          setLoading(false);
+          toast.error("Failed to load document content.");
         }
-      };
-      loadDoc();
-    }
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [selectedFile, token, docs, orgId]);
 
   const selectedDoc = docs.find((d) => d.file_path === selectedFile);
 
   return (
     <div className="space-y-6">
+      <Breadcrumbs items={[{ label: "Dashboard", href: "/dashboard" }, { label: "Org Docs" }]} className="mb-4" />
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Link href={backHref}>

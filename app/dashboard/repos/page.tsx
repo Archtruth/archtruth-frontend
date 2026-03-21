@@ -6,6 +6,7 @@ import { getServerSession } from "@/lib/supabase/server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { ReposSkeleton } from "@/components/ui/loading-skeleton";
+import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { ReposList } from "./repos-list";
 
 type Props = {
@@ -88,6 +89,7 @@ async function ReposContent({ searchParams }: Props) {
 
   return (
     <div className="space-y-6">
+      <Breadcrumbs items={[{ label: "Dashboard", href: "/dashboard" }, { label: "Repositories" }]} className="mb-4" />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold">Repositories</h1>

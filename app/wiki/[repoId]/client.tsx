@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useEffect, useMemo, useState, useCallback } from "react";
+import { toast } from "sonner";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { presignWikiPage, presignOrgDocument } from "@/lib/api/backend";
@@ -299,33 +300,34 @@ export function FullScreenWikiClient({
     }
   }, [selectedService]);
 
-  // Load content when selection changes
   useEffect(() => {
+    let cancelled = false;
     if (selectedType === "org-doc" && selectedOrgDoc && orgId) {
       setLoading(true);
       fetchOrgDocContent(orgId, selectedOrgDoc, token)
-        .then((content) => {
-          setMarkdown(content);
-          setLoading(false);
-        })
+        .then((content) => { if (!cancelled) setMarkdown(content); })
         .catch((e) => {
-          console.error("Failed to load org doc:", e);
-          setMarkdown("Failed to load document.");
-          setLoading(false);
-        });
+          if (!cancelled) {
+            console.error("Failed to load org doc:", e);
+            setMarkdown("Failed to load document.");
+            toast.error("Failed to load document.");
+          }
+        })
+        .finally(() => { if (!cancelled) setLoading(false); });
     } else if (selectedType === "module" && selectedModule) {
       setLoading(true);
       fetchWikiContent(repoId, selectedModule, token)
-        .then((content) => {
-          setMarkdown(content);
-          setLoading(false);
-        })
+        .then((content) => { if (!cancelled) setMarkdown(content); })
         .catch((e) => {
-          console.error("Failed to load wiki page:", e);
-          setMarkdown("Failed to load wiki page.");
-          setLoading(false);
-        });
+          if (!cancelled) {
+            console.error("Failed to load wiki page:", e);
+            setMarkdown("Failed to load wiki page.");
+            toast.error("Failed to load wiki page.");
+          }
+        })
+        .finally(() => { if (!cancelled) setLoading(false); });
     }
+    return () => { cancelled = true; };
   }, [selectedType, selectedOrgDoc, selectedModule, repoId, orgId, token]);
 
 
@@ -371,6 +373,103 @@ export function FullScreenWikiClient({
     if (selectedType !== "module") return [];
     return extractSectionNav(markdown);
   }, [selectedType, markdown]);
+
+  const markdownComponents = useMemo(
+    () => ({
+      h2: ({ children, ...props }: any) => {
+        const title = String(children);
+        const id = title.toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-") || "section";
+        return (
+          <h2 id={id} className="scroll-mt-24" {...props}>
+            {children}
+          </h2>
+        );
+      },
+      h3: ({ children, ...props }: any) => {
+        const title = String(children);
+        const id = title.toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-") || "section";
+        return (
+          <h3 id={id} className="scroll-mt-24" {...props}>
+            {children}
+          </h3>
+        );
+      },
+      h4: ({ children, ...props }: any) => {
+        const title = String(children);
+        const id = title.toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-") || "section";
+        return (
+          <h4 id={id} className="scroll-mt-24" {...props}>
+            {children}
+          </h4>
+        );
+      },
+      ...sharedMarkdownComponents,
+      a: ({ href, children, ...props }: any) => {
+        const h = href || "";
+        if (h.startsWith("wiki:")) {
+          const target = h.slice("wiki:".length);
+          const withRepo = target.includes("/");
+          const [repoPart, slugPart] = withRepo ? target.split("/") : [null, target];
+          const slug = slugPart ?? target;
+          if (repoPart) {
+            const otherRepoId = parseInt(repoPart, 10);
+            if (!isNaN(otherRepoId) && otherRepoId !== repoId && orgId) {
+              return (
+                <Link
+                  href={`/wiki?org_id=${encodeURIComponent(orgId)}&repo=${otherRepoId}&module=${encodeURIComponent(slug)}`}
+                  className="text-primary underline underline-offset-4 hover:opacity-90"
+                >
+                  {children}
+                </Link>
+              );
+            }
+          }
+          const modulePage = pages.find((p) => p.slug === slug);
+          if (modulePage) {
+            const topName = slug.split("/")[0];
+            return (
+              <button
+                type="button"
+                className="text-primary underline underline-offset-4 hover:opacity-90"
+                onClick={() => handleSelectModule(topName, slug)}
+              >
+                {children}
+              </button>
+            );
+          }
+        }
+        if (h.startsWith("code:")) {
+          const filePath = h.slice("code:".length);
+          return (
+            <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400">
+              <Code className="h-3 w-3 inline flex-shrink-0" />
+              <code className="text-sm bg-muted/50 px-1 py-0.5 rounded">{filePath}</code>
+            </span>
+          );
+        }
+        const isCodeLink = h.includes("/blob/") || h.includes("/-/blob/") || h.includes("/src/");
+        return (
+          <a
+            href={h}
+            {...props}
+            target="_blank"
+            rel="noreferrer"
+            className={cn(
+              "underline underline-offset-4 hover:opacity-90",
+              isCodeLink
+                ? "text-blue-600 dark:text-blue-400 inline-flex items-center gap-1"
+                : "text-primary"
+            )}
+          >
+            {isCodeLink && <Code className="h-3 w-3 inline flex-shrink-0" />}
+            {children}
+            {isCodeLink && <ExternalLink className="h-3 w-3 inline flex-shrink-0 opacity-50" />}
+          </a>
+        );
+      },
+    }),
+    [pages, repoId, orgId, handleSelectModule]
+  );
 
   const filteredPages = useMemo(() => {
     if (!searchQuery) return [];
@@ -427,7 +526,7 @@ export function FullScreenWikiClient({
   }, [searchQuery, orgDocs, pages, handleSelectOrgDoc, handleSelectModule]);
 
   return (
-    <div className="fixed inset-0 flex flex-col bg-background">
+    <div className="flex flex-col min-h-screen bg-background">
       {/* Header */}
       <div className="sticky top-0 z-30 border-b bg-background/95 backdrop-blur">
         <div className="flex items-center justify-between px-6 py-4">
@@ -721,102 +820,7 @@ export function FullScreenWikiClient({
 
                 <div className="rounded-xl border bg-card/80 backdrop-blur shadow-sm p-6">
                   <article className="prose dark:prose-invert max-w-none prose-headings:scroll-mt-24 prose-headings:font-semibold prose-h2:text-2xl prose-h2:mt-8 prose-h2:mb-4 prose-h3:text-xl prose-h3:mt-6 prose-h3:mb-3 prose-h4:text-lg prose-h4:mt-4 prose-h4:mb-2 prose-p:my-4 prose-ul:my-4 prose-ol:my-4 prose-li:my-1">
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      components={{
-                        h2: ({ children, ...props }) => {
-                          const title = String(children);
-                          const id = title.toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-") || "section";
-                          return (
-                            <h2 id={id} className="scroll-mt-24" {...props}>
-                              {children}
-                            </h2>
-                          );
-                        },
-                        h3: ({ children, ...props }) => {
-                          const title = String(children);
-                          const id = title.toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-") || "section";
-                          return (
-                            <h3 id={id} className="scroll-mt-24" {...props}>
-                              {children}
-                            </h3>
-                          );
-                        },
-                        h4: ({ children, ...props }) => {
-                          const title = String(children);
-                          const id = title.toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-") || "section";
-                          return (
-                            <h4 id={id} className="scroll-mt-24" {...props}>
-                              {children}
-                            </h4>
-                          );
-                        },
-                        ...sharedMarkdownComponents,
-                        a: ({ href, children, ...props }) => {
-                          const h = href || "";
-                          if (h.startsWith("wiki:")) {
-                            const target = h.slice("wiki:".length);
-                            const withRepo = target.includes("/");
-                            const [repoPart, slugPart] = withRepo ? target.split("/") : [null, target];
-                            const slug = slugPart ?? target;
-                            if (repoPart) {
-                              const otherRepoId = parseInt(repoPart, 10);
-                              if (!isNaN(otherRepoId) && otherRepoId !== repoId && orgId) {
-                                return (
-                                  <Link
-                                    href={`/wiki?org_id=${encodeURIComponent(orgId)}&repo=${otherRepoId}&module=${encodeURIComponent(slug)}`}
-                                    className="text-primary underline underline-offset-4 hover:opacity-90"
-                                  >
-                                    {children}
-                                  </Link>
-                                );
-                              }
-                            }
-                            const modulePage = pages.find((p) => p.slug === slug);
-                            if (modulePage) {
-                              const topName = slug.split("/")[0];
-                              return (
-                                <button
-                                  type="button"
-                                  className="text-primary underline underline-offset-4 hover:opacity-90"
-                                  onClick={() => handleSelectModule(topName, slug)}
-                                >
-                                  {children}
-                                </button>
-                              );
-                            }
-                          }
-                          if (h.startsWith("code:")) {
-                            const filePath = h.slice("code:".length);
-                            return (
-                              <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400">
-                                <Code className="h-3 w-3 inline flex-shrink-0" />
-                                <code className="text-sm bg-muted/50 px-1 py-0.5 rounded">{filePath}</code>
-                              </span>
-                            );
-                          }
-                          const isCodeLink = h.includes("/blob/") || h.includes("/-/blob/") || h.includes("/src/");
-                          return (
-                            <a
-                              href={h}
-                              {...props}
-                              target="_blank"
-                              rel="noreferrer"
-                              className={cn(
-                                "underline underline-offset-4 hover:opacity-90",
-                                isCodeLink
-                                  ? "text-blue-600 dark:text-blue-400 inline-flex items-center gap-1"
-                                  : "text-primary"
-                              )}
-                            >
-                              {isCodeLink && <Code className="h-3 w-3 inline flex-shrink-0" />}
-                              {children}
-                              {isCodeLink && <ExternalLink className="h-3 w-3 inline flex-shrink-0 opacity-50" />}
-                            </a>
-                          );
-                        },
-                      }}
-                    >
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                       {markdown}
                     </ReactMarkdown>
                   </article>
@@ -842,104 +846,7 @@ export function FullScreenWikiClient({
 
                 <div className="rounded-xl border bg-card/80 backdrop-blur shadow-sm p-6">
                   <article className="prose dark:prose-invert max-w-none prose-headings:scroll-mt-24 prose-headings:font-semibold prose-h2:text-2xl prose-h2:mt-8 prose-h2:mb-4 prose-h3:text-xl prose-h3:mt-6 prose-h3:mb-3 prose-h4:text-lg prose-h4:mt-4 prose-h4:mb-2 prose-p:my-4 prose-ul:my-4 prose-ol:my-4 prose-li:my-1">
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      components={{
-                        h2: ({ children, ...props }) => {
-                          const title = String(children);
-                          const id = title.toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-") || "section";
-                          return (
-                            <h2 id={id} className="scroll-mt-24" {...props}>
-                              {children}
-                            </h2>
-                          );
-                        },
-                        h3: ({ children, ...props }) => {
-                          const title = String(children);
-                          const id = title.toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-") || "section";
-                          return (
-                            <h3 id={id} className="scroll-mt-24" {...props}>
-                              {children}
-                            </h3>
-                          );
-                        },
-                        h4: ({ children, ...props }) => {
-                          const title = String(children);
-                          const id = title.toLowerCase().replace(/[^a-z0-9\s-]/g, "").replace(/\s+/g, "-").replace(/-+/g, "-") || "section";
-                          return (
-                            <h4 id={id} className="scroll-mt-24" {...props}>
-                              {children}
-                            </h4>
-                          );
-                        },
-                        ...sharedMarkdownComponents,
-                        a: ({ href, children, ...props }) => {
-                          const h = href || "";
-                          if (h.startsWith("wiki:")) {
-                            const target = h.slice("wiki:".length);
-                            const withRepo = target.includes("/");
-                            const [repoPart, slugPart] = withRepo ? target.split("/") : [null, target];
-                            const slug = slugPart ?? target;
-                            if (repoPart) {
-                              const otherRepoId = parseInt(repoPart, 10);
-                              if (!isNaN(otherRepoId) && otherRepoId !== repoId && orgId) {
-                                return (
-                                  <Link
-                                    href={`/wiki?org_id=${encodeURIComponent(orgId)}&repo=${otherRepoId}&module=${encodeURIComponent(slug)}`}
-                                    className="text-primary underline underline-offset-4 hover:opacity-90"
-                                  >
-                                    {children}
-                                  </Link>
-                                );
-                              }
-                            }
-                            const modulePage = pages.find((p) => p.slug === slug);
-                            if (modulePage) {
-                              const topName = slug.split("/")[0];
-                              return (
-                                <button
-                                  type="button"
-                                  className="text-primary underline underline-offset-4 hover:opacity-90"
-                                  onClick={() => handleSelectModule(topName, slug)}
-                                >
-                                  {children}
-                                </button>
-                              );
-                            }
-                          }
-                          // Handle code: protocol links (render file path inline)
-                          if (h.startsWith("code:")) {
-                            const filePath = h.slice("code:".length);
-                            return (
-                              <span className="inline-flex items-center gap-1 text-blue-600 dark:text-blue-400">
-                                <Code className="h-3 w-3 inline flex-shrink-0" />
-                                <code className="text-sm bg-muted/50 px-1 py-0.5 rounded">{filePath}</code>
-                              </span>
-                            );
-                          }
-                          // GitHub / source code links — show with code icon
-                          const isCodeLink = h.includes("/blob/") || h.includes("/-/blob/") || h.includes("/src/");
-                          return (
-                            <a
-                              href={h}
-                              {...props}
-                              target="_blank"
-                              rel="noreferrer"
-                              className={cn(
-                                "underline underline-offset-4 hover:opacity-90",
-                                isCodeLink
-                                  ? "text-blue-600 dark:text-blue-400 inline-flex items-center gap-1"
-                                  : "text-primary"
-                              )}
-                            >
-                              {isCodeLink && <Code className="h-3 w-3 inline flex-shrink-0" />}
-                              {children}
-                              {isCodeLink && <ExternalLink className="h-3 w-3 inline flex-shrink-0 opacity-50" />}
-                            </a>
-                          );
-                        },
-                      }}
-                    >
+                    <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
                       {markdown}
                     </ReactMarkdown>
                   </article>

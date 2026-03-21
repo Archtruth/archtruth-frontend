@@ -3,9 +3,9 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ArrowRight, Book, Database, FileText, Github, Zap } from "lucide-react";
+import { ArrowRight, Book, Database, FileText, Github, Loader2, Zap } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Modal } from "@/components/ui/modal";
 import { LoginForm } from "@/app/login/login-form";
 
@@ -20,6 +20,7 @@ export function HomeClient({ initialLoginOpen = false, initialError }: HomeClien
   const searchParams = useSearchParams();
 
   const [loginOpen, setLoginOpen] = React.useState<boolean>(initialLoginOpen);
+  const [navigating, setNavigating] = React.useState(false);
 
   const errorFromUrl = searchParams.get("error");
   const error = errorFromUrl || initialError || null;
@@ -35,6 +36,22 @@ export function HomeClient({ initialLoginOpen = false, initialError }: HomeClien
     }
     const qs = next.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname);
+  }
+
+  function handleSignIn() {
+    if (navigating) return;
+    // Clear the error param from the URL immediately so a stale error isn't
+    // visible if the new attempt redirects back to this page.
+    const next = new URLSearchParams(searchParams.toString());
+    next.delete("error");
+    next.set("login", "1");
+    const qs = next.toString();
+    router.replace(qs ? `${pathname}?${qs}` : pathname);
+    setNavigating(true);
+    // Navigate to the server-side OAuth route. The full-page overlay prevents
+    // the user from clicking again while the browser waits for the server
+    // redirect (can take 1-3 s on cold starts).
+    window.location.href = "/auth/login";
   }
 
   return (
@@ -151,8 +168,15 @@ export function HomeClient({ initialLoginOpen = false, initialError }: HomeClien
         onOpenChange={setLoginOpenAndSyncUrl}
         title="Sign in to ArchTruth"
       >
-        <LoginForm variant="embedded" error={error} />
+        <LoginForm variant="embedded" error={error} onSignIn={handleSignIn} />
       </Modal>
+
+      {navigating && (
+        <div className="fixed inset-0 z-[100] flex flex-col items-center justify-center gap-3 bg-background/90 backdrop-blur-sm">
+          <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          <p className="text-sm text-muted-foreground">Redirecting to GitHub…</p>
+        </div>
+      )}
     </div>
   );
 }

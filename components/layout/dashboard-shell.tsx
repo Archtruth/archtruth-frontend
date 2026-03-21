@@ -5,7 +5,7 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { CommandPalette } from "@/components/ui/command-palette";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import {
@@ -13,14 +13,11 @@ import {
   Book,
   Layers,
   Home,
-  Plus,
-  Trash2,
   MessageSquare,
   User,
-  Library,
   Network,
   Search,
-  Loader2,
+  Settings,
 } from "lucide-react";
 
 export type NavItem = {
@@ -43,12 +40,10 @@ type DashboardShellProps = {
 
 const baseNavItems: NavItem[] = [
   { label: "Overview", href: "/dashboard", icon: <Home className="h-4 w-4" /> },
-  { label: "Connect GitHub", href: "/dashboard/connect-github", icon: <Plus className="h-4 w-4" /> },
   { label: "Repositories", href: "/dashboard/repos", icon: <Layers className="h-4 w-4" /> },
   { label: "Wiki", href: "/wiki", icon: <Book className="h-4 w-4" /> },
-  { label: "Org Docs", href: "/dashboard/orgs/docs", icon: <Library className="h-4 w-4" /> },
-  { label: "Architecture", href: "/dashboard/orgs/architecture", icon: <Network className="h-4 w-4" /> },
   { label: "Chat", href: "/dashboard/chat", icon: <MessageSquare className="h-4 w-4" /> },
+  { label: "Settings", href: "/dashboard/settings", icon: <Settings className="h-4 w-4" /> },
 ];
 
 export function DashboardShell({
@@ -64,6 +59,8 @@ export function DashboardShell({
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const [orgId, setOrgId] = useState<string | undefined>(currentOrgId || orgOptions?.[0]?.id);
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const [shortcutHint, setShortcutHint] = useState("Ctrl+K");
   const [isTransitioning, setIsTransitioning] = useState(false);
   const transitionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
@@ -119,12 +116,6 @@ export function DashboardShell({
       if (item.href === "/wiki") {
         return { ...item, href: `/wiki?org_id=${encodeURIComponent(orgId)}` };
       }
-      if (item.href === "/dashboard/orgs/docs") {
-        return { ...item, href: `/dashboard/orgs/${orgId}/docs` };
-      }
-      if (item.href === "/dashboard/orgs/architecture") {
-        return { ...item, href: `/dashboard/orgs/${orgId}/architecture` };
-      }
       return item;
     });
   }, [orgId]);
@@ -178,7 +169,7 @@ export function DashboardShell({
       router.push(newUrl);
     }
     // For dashboard home or other routes without org context, go to repos
-    else if (pathname === '/dashboard' || pathname === '/dashboard/connect-github') {
+    else if (pathname === '/dashboard' || pathname === '/dashboard/settings') {
       router.push(`/dashboard/repos?org_id=${encodeURIComponent(val)}`);
     }
     
@@ -195,6 +186,12 @@ export function DashboardShell({
     };
   }, []);
 
+  useEffect(() => {
+    if (typeof navigator === "undefined") return;
+    const isApple = /Mac|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    setShortcutHint(isApple ? "⌘K" : "Ctrl+K");
+  }, []);
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col">
       <header className="sticky top-0 z-40 border-b border-slate-200 bg-white/90 backdrop-blur">
@@ -207,20 +204,30 @@ export function DashboardShell({
           </Link>
           <div className="hidden md:flex flex-1 items-center gap-3">
             <div className="relative flex-1 max-w-lg">
-              <Search className="absolute left-3 top-2.5 h-4 w-4 text-slate-400" />
-              <Input
-                placeholder="Search docs, repos, endpoints (coming soon)"
-                className="pl-9"
-                aria-label="Global search (coming soon)"
-              />
+              <Button
+                type="button"
+                variant="outline"
+                className="h-9 w-full justify-start gap-2 border-slate-200 bg-white pl-3 pr-2 text-left font-normal text-slate-500 shadow-sm hover:bg-slate-50 hover:text-slate-700"
+                onClick={() => setCommandPaletteOpen(true)}
+                aria-label="Open command palette"
+              >
+                <Search className="h-4 w-4 shrink-0 text-slate-400" />
+                <span className="flex-1 truncate text-sm">Search or jump to…</span>
+                <kbd className="hidden sm:inline-flex h-5 shrink-0 items-center rounded border border-slate-200 bg-slate-50 px-1.5 font-mono text-[10px] font-medium text-slate-500">
+                  {shortcutHint}
+                </kbd>
+              </Button>
             </div>
             <Select value={orgId} onValueChange={handleOrgChange} disabled={!orgOptions || orgOptions.length === 0}>
-              <SelectTrigger className="w-52">
-                <SelectValue placeholder="Select org" />
+              <SelectTrigger className="w-60 h-10 text-sm font-medium border-slate-300 bg-white shadow-sm">
+                <div className="flex items-center gap-2">
+                  <Network className="h-4 w-4 text-slate-500 shrink-0" />
+                  <SelectValue placeholder="Select organization" />
+                </div>
               </SelectTrigger>
               <SelectContent>
                 {(orgOptions || []).map((org) => (
-                  <SelectItem key={org.id} value={org.id}>
+                  <SelectItem key={org.id} value={org.id} className="text-sm font-medium">
                     {org.name}
                   </SelectItem>
                 ))}
@@ -229,10 +236,7 @@ export function DashboardShell({
             </Select>
           </div>
           <div className="flex items-center gap-3 ml-auto">
-            <div className="hidden sm:flex flex-col text-right leading-tight">
-              <span className="text-sm font-semibold">{userName || "User"}</span>
-              <span className="text-xs text-slate-500">{orgId ? "Org scoped" : "No org selected"}</span>
-            </div>
+            <span className="hidden sm:inline text-sm font-semibold">{userName || "User"}</span>
              <Avatar>
                 <AvatarImage src={userAvatar || ""} alt={userName || "User"} />
               <AvatarFallback>{userName ? userName[0]?.toUpperCase() : <User className="h-4 w-4" />}</AvatarFallback>
@@ -266,28 +270,6 @@ export function DashboardShell({
                 </div>
               </Link>
             ))}
-          {onDeleteAccount && (
-              <div className="mt-4 border-t border-slate-200 pt-3">
-              <form action={onDeleteAccount}>
-                <button
-                  type="submit"
-                  className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-red-600 hover:bg-red-50 hover:text-red-700"
-                  onClick={(e) => {
-                      if (
-                        !confirm(
-                          "Are you sure you want to delete your account? This action cannot be undone and will delete all your data."
-                        )
-                      ) {
-                      e.preventDefault();
-                    }
-                  }}
-                >
-                  <Trash2 className="h-4 w-4" />
-                  Delete Account
-                </button>
-              </form>
-            </div>
-          )}
           </nav>
 
           <div className="mt-4 rounded-xl border border-slate-200 bg-white p-3 text-xs text-slate-600 shadow-sm">
@@ -304,10 +286,10 @@ export function DashboardShell({
         <main className="flex-1 space-y-4">
           <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
             {isTransitioning ? (
-              <div className="flex flex-col items-center justify-center py-24">
-                <Loader2 className="h-12 w-12 animate-spin text-slate-400 mb-4" />
-                <p className="text-lg font-medium text-slate-700">Switching organization...</p>
-                <p className="text-sm text-slate-500 mt-2">Loading data for the selected organization</p>
+              <div className="space-y-4 animate-pulse">
+                <div className="h-8 bg-slate-200 rounded w-1/3"></div>
+                <div className="h-4 bg-slate-200 rounded w-1/2"></div>
+                <div className="h-64 bg-slate-200 rounded"></div>
               </div>
             ) : (
               children
@@ -315,6 +297,8 @@ export function DashboardShell({
           </div>
         </main>
       </div>
+
+      <CommandPalette open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen} orgId={orgId} />
     </div>
   );
 }

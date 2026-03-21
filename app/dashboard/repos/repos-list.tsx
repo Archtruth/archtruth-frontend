@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -78,7 +79,7 @@ function IngestionStatusPopover({ repoId, token, jobId }: { repoId: number; toke
       await cancelIngestionJob(jobId, token);
     } catch (e) {
       console.error("Failed to cancel job", e);
-      alert("Failed to cancel job.");
+      toast.error("Failed to cancel job.");
     } finally {
       setCancelling(false);
     }
@@ -305,7 +306,7 @@ export function ReposList({
         return;
       }
       console.error("Failed to retry queue", e);
-      alert(e instanceof Error ? e.message : "Failed to queue scan. Please try again.");
+      toast.error(e instanceof Error ? e.message : "Failed to queue scan. Please try again.");
     } finally {
       setRetryQueueMap((prev) => ({ ...prev, [connectedRepoId]: false }));
     }
@@ -328,7 +329,7 @@ export function ReposList({
       setRepoToDisconnect(null);
     } catch (e) {
       console.error("Failed to disconnect repo", e);
-      alert("Failed to disconnect repository. Please try again.");
+      toast.error("Failed to disconnect repository. Please try again.");
     } finally {
       setDisconnecting(false);
     }
@@ -449,7 +450,7 @@ export function ReposList({
                                   onClick={() => {
                                     const connected = getConnectedRepo(repo.id);
                                     if (!connected) {
-                                      alert("Repository is connected, but its internal ID wasn't found yet. Please wait a moment and try again.");
+                                      toast.error("Repository is connected, but its internal ID wasn't found yet. Please wait a moment and try again.");
                                       return;
                                     }
                                     router.push(`/wiki/${connected.id}?org_id=${orgId}`);

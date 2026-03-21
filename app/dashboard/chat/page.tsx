@@ -2,6 +2,7 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { getServerSession } from "@/lib/supabase/server";
 import { backendFetch, isUnauthorizedBackendError } from "@/lib/api/backend";
+import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { ChatClient } from "./chat-client";
 
 type Props = {
@@ -56,6 +57,11 @@ async function ChatPageInner({ searchParams }: Props) {
     throw e;
   }
 
-  return <ChatClient token={token} orgId={selectedOrgId} initialRepos={repos} />;
+  return (
+    <div className="space-y-6">
+      <Breadcrumbs items={[{ label: "Dashboard", href: "/dashboard" }, { label: "Chat" }]} className="mb-4" />
+      <ChatClient token={token} orgId={selectedOrgId} initialRepos={repos} />
+    </div>
+  );
 }
 

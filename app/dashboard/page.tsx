@@ -398,7 +398,6 @@ async function DashboardContent() {
               <div key={org.id} className="flex items-center justify-between rounded-md border border-border p-3">
                 <div>
                   <div className="font-medium">{org.name}</div>
-                  <div className="text-xs text-mutedForeground">{org.id}</div>
                 </div>
                 <div className="flex gap-2">
                   {!org.hasInstallations && (

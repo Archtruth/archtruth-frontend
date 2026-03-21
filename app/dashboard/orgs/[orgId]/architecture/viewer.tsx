@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { FileText, Loader, Network, ChevronLeft } from "lucide-react";
 import { presignOrgDocument } from "@/lib/api/backend-client";
 import { sharedMarkdownComponents } from "@/components/markdown/sharedMarkdownComponents";
+import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 
 type Document = {
   id: number;
@@ -33,23 +34,19 @@ export default function ArchitectureClient({ orgId, token, docs }: { orgId: stri
 
   useEffect(() => {
     if (!architectureDoc) return;
-    const load = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const content = await fetchDoc(orgId, architectureDoc.file_path, token);
-        setMarkdown(content);
-      } catch (e: any) {
-        setError(e?.message || "Failed to load architecture doc");
-      } finally {
-        setLoading(false);
-      }
-    };
-    load();
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    fetchDoc(orgId, architectureDoc.file_path, token)
+      .then((content) => { if (!cancelled) setMarkdown(content); })
+      .catch((e: any) => { if (!cancelled) setError(e?.message || "Failed to load architecture doc"); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
   }, [architectureDoc, orgId, token]);
 
   return (
     <div className="space-y-6">
+      <Breadcrumbs items={[{ label: "Dashboard", href: "/dashboard" }, { label: "Architecture" }]} className="mb-4" />
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Link href={`/dashboard/orgs/${orgId}/docs`}>
