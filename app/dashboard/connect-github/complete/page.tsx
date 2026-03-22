@@ -1,6 +1,10 @@
 import { redirect } from "next/navigation";
 import { backendFetch, isUnauthorizedBackendError } from "@/lib/api/backend";
 import { getServerSession } from "@/lib/supabase/server";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import { Check, AlertTriangle } from "lucide-react";
 
 type Props = {
   searchParams: { [key: string]: string | string[] | undefined };
@@ -14,10 +18,16 @@ export default async function ConnectGithubComplete({ searchParams }: Props) {
 
   if (!installationId) {
     return (
-      <>
-        <h1>Missing installation_id</h1>
-        <p>GitHub did not return an installation_id. Re-run the install flow.</p>
-      </>
+      <Card className="max-w-md mx-auto mt-12">
+        <CardContent className="p-6 text-center space-y-3">
+          <AlertTriangle className="h-10 w-10 text-destructive mx-auto" />
+          <h2 className="text-lg font-semibold">Missing installation</h2>
+          <p className="text-sm text-muted-foreground">GitHub did not return an installation ID. Please retry the install flow.</p>
+          <Link href="/dashboard/connect-github">
+            <Button variant="outline">Go back</Button>
+          </Link>
+        </CardContent>
+      </Card>
     );
   }
 
@@ -28,18 +38,18 @@ export default async function ConnectGithubComplete({ searchParams }: Props) {
 
   if (!stateOrg) {
     return (
-      <>
-        <h1>Missing organization context</h1>
-        <p>
-          We did not receive an <code>org_id</code> in the callback state. Please restart the GitHub App installation
-          from the Connect GitHub page and select an organization before installing.
-        </p>
-        <p className="mt-3">
-          <a href="/dashboard/connect-github" className="underline">
-            Go back to Connect GitHub
-          </a>
-        </p>
-      </>
+      <Card className="max-w-md mx-auto mt-12">
+        <CardContent className="p-6 text-center space-y-3">
+          <AlertTriangle className="h-10 w-10 text-amber-500 mx-auto" />
+          <h2 className="text-lg font-semibold">Missing workspace context</h2>
+          <p className="text-sm text-muted-foreground">
+            Please restart the GitHub App installation from the Connect GitHub page.
+          </p>
+          <Link href="/dashboard/connect-github">
+            <Button variant="outline">Go back</Button>
+          </Link>
+        </CardContent>
+      </Card>
     );
   }
 
@@ -54,28 +64,40 @@ export default async function ConnectGithubComplete({ searchParams }: Props) {
     });
 
     return (
-      <>
-        <h1>Installation linked</h1>
-        <p>Installation {installationId} has been linked to org {stateOrg}.</p>
-        <p>
-          Continue to{" "}
-          <a href={`/dashboard/repos?org_id=${stateOrg}`} className="underline">
-            repositories
-          </a>{" "}
-          to connect a repo.
-        </p>
-      </>
+      <Card className="max-w-md mx-auto mt-12">
+        <CardContent className="p-6 text-center space-y-4">
+          <div className="flex justify-center">
+            <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/10">
+              <Check className="h-7 w-7 text-emerald-600" />
+            </div>
+          </div>
+          <h2 className="text-xl font-semibold">GitHub App Connected!</h2>
+          <p className="text-sm text-muted-foreground">
+            Your GitHub App has been successfully installed and linked to your workspace.
+          </p>
+          <Link href={`/dashboard/repos?org_id=${stateOrg}`}>
+            <Button className="gap-1.5 w-full">
+              Continue to Repositories
+            </Button>
+          </Link>
+        </CardContent>
+      </Card>
     );
   } catch (err: any) {
     if (isUnauthorizedBackendError(err)) {
       redirect("/?login=1&error=session_expired");
     }
     return (
-      <>
-        <h1>Linking failed</h1>
-        <p>{String(err?.message || err)}</p>
-      </>
+      <Card className="max-w-md mx-auto mt-12">
+        <CardContent className="p-6 text-center space-y-3">
+          <AlertTriangle className="h-10 w-10 text-destructive mx-auto" />
+          <h2 className="text-lg font-semibold">Connection failed</h2>
+          <p className="text-sm text-muted-foreground">{String(err?.message || err)}</p>
+          <Link href="/dashboard/connect-github">
+            <Button variant="outline">Try again</Button>
+          </Link>
+        </CardContent>
+      </Card>
     );
   }
 }
-

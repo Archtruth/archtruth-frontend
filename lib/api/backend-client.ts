@@ -14,6 +14,14 @@ import {
   presignOrgDocument as presignOrgDocumentBase,
   listWikiPages as listWikiPagesBase,
   presignWikiPage as presignWikiPageBase,
+  deleteWorkspace as deleteWorkspaceBase,
+  getDashboardData as getDashboardDataBase,
+  getWikiData as getWikiDataBase,
+  createCapability as createCapabilityBase,
+  updateCapability as updateCapabilityBase,
+  deleteCapability as deleteCapabilityBase,
+  assignServiceToCapability as assignServiceBase,
+  unassignServiceFromCapability as unassignServiceBase,
   isBackendError,
   type BackendError,
 } from "@/lib/api/backend";
@@ -100,6 +108,38 @@ export function listIngestionTasks(repoId: number, token: string) {
 
 export function cancelIngestionJob(jobId: number, token: string) {
   return withAuthRedirect(() => cancelIngestionJobBase(jobId, token));
+}
+
+export function deleteWorkspace(orgId: string, token: string) {
+  return withAuthRedirect(() => deleteWorkspaceBase(orgId, token));
+}
+
+export function getDashboardData(orgId: string, token: string) {
+  return withAuthRedirect(() => getDashboardDataBase(orgId, token));
+}
+
+export function getWikiData(orgId: string, token: string) {
+  return withAuthRedirect(() => getWikiDataBase(orgId, token));
+}
+
+export function createCapability(orgId: string, data: { name: string; description?: string; parent_capability_id?: string }, token: string) {
+  return withAuthRedirect(() => createCapabilityBase(orgId, data, token));
+}
+
+export function updateCapability(orgId: string, capId: string, data: { name?: string; description?: string }, token: string) {
+  return withAuthRedirect(() => updateCapabilityBase(orgId, capId, data, token));
+}
+
+export function deleteCapability(orgId: string, capId: string, token: string) {
+  return withAuthRedirect(() => deleteCapabilityBase(orgId, capId, token));
+}
+
+export function assignServiceToCapability(orgId: string, capId: string, repoId: number, token: string) {
+  return withAuthRedirect(() => assignServiceBase(orgId, capId, repoId, token));
+}
+
+export function unassignServiceFromCapability(orgId: string, capId: string, repoId: number, token: string) {
+  return withAuthRedirect(() => unassignServiceBase(orgId, capId, repoId, token));
 }
 
 export { isBackendError };

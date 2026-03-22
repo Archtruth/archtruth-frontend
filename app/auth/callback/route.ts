@@ -12,11 +12,13 @@ export async function GET(request: NextRequest) {
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const backendUrl = process.env.NEXT_PUBLIC_BACKEND_URL;
 
   if (!supabaseUrl || !supabaseAnonKey) {
     return NextResponse.redirect(`${origin}/?login=1&error=config_error`);
   }
 
+  // Default to dashboard; we'll check orgs after auth
   const response = NextResponse.redirect(`${origin}/dashboard`);
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
@@ -33,13 +35,34 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  const { error } = await supabase.auth.exchangeCodeForSession(code);
+  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error) {
     console.error("Auth callback error:", error.message);
     return NextResponse.redirect(
       `${origin}/?login=1&error=${encodeURIComponent(error.message)}`
     );
+  }
+
+  // Check if user has orgs, redirect to onboarding if not
+  if (backendUrl && data?.session?.access_token) {
+    try {
+      const orgsResp = await fetch(`${backendUrl}/orgs`, {
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${data.session.access_token}`,
+        },
+        cache: "no-store",
+      });
+      if (orgsResp.ok) {
+        const orgsData = await orgsResp.json();
+        if (!orgsData.organizations || orgsData.organizations.length === 0) {
+          return NextResponse.redirect(`${origin}/onboarding`);
+        }
+      }
+    } catch {
+      // Non-fatal: proceed to dashboard
+    }
   }
 
   return response;

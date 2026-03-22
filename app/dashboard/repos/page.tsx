@@ -1,12 +1,7 @@
 import { Suspense } from "react";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 import { backendFetch, isUnauthorizedBackendError } from "@/lib/api/backend";
 import { getServerSession } from "@/lib/supabase/server";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { ReposSkeleton } from "@/components/ui/loading-skeleton";
-import { Breadcrumbs } from "@/components/ui/breadcrumbs";
 import { ReposList } from "./repos-list";
 
 type Props = {
@@ -15,126 +10,76 @@ type Props = {
 
 async function ReposContent({ searchParams }: Props) {
   const session = await getServerSession();
-  if (!session?.access_token) {
-    redirect("/?login=1&error=session_expired");
-  }
+  if (!session?.access_token) redirect("/?login=1&error=session_expired");
   const token = session.access_token;
 
   const orgIdParam = Array.isArray(searchParams["org_id"]) ? searchParams["org_id"][0] : searchParams["org_id"];
-  let orgsResp: { organizations: { id: string; name: string }[] };
+
+  let orgs: { id: string; name: string }[] = [];
   try {
-    orgsResp = await backendFetch<{ organizations: { id: string; name: string }[] }>("/orgs", token);
+    const resp = await backendFetch<{ organizations: { id: string; name: string }[] }>("/orgs", token);
+    orgs = resp.organizations || [];
   } catch (e) {
-    if (isUnauthorizedBackendError(e)) {
-      redirect("/?login=1&error=session_expired");
-    }
-    throw e;
-  }
-  const orgs = orgsResp.organizations || [];
-  const selectedOrgId = orgIdParam || orgs[0]?.id;
-
-  if (!selectedOrgId) {
-    return (
-      <Card>
-        <CardHeader>
-          <CardTitle>No organizations</CardTitle>
-          <CardDescription>Create one first from the dashboard.</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Link href="/dashboard">
-            <Button variant="outline">Back to dashboard</Button>
-          </Link>
-        </CardContent>
-      </Card>
-    );
-  }
-
-  let installations: { installation_id: number; account_login: string }[] = [];
-  let connectedRepos: any[] = [];
-  try {
-    const installationsResp = await backendFetch<{ installations: { installation_id: number; account_login: string }[] }>(
-      `/orgs/${selectedOrgId}/installations`,
-      token
-    );
-    installations = installationsResp.installations || [];
-
-    const connectedResp = await backendFetch<{ repositories: any[] }>(
-      `/orgs/${selectedOrgId}/repositories`,
-      token
-    );
-    connectedRepos = connectedResp.repositories || [];
-  } catch (e) {
-    if (isUnauthorizedBackendError(e)) {
-      redirect("/?login=1&error=session_expired");
-    }
+    if (isUnauthorizedBackendError(e)) redirect("/?login=1&error=session_expired");
     throw e;
   }
 
-  // Fetch repos per installation
+  const orgId = orgIdParam || orgs[0]?.id;
+  if (!orgId) redirect("/onboarding");
+
+  // Parallel fetches
+  const [installsResp, reposResp, capsResp] = await Promise.all([
+    backendFetch<{ installations: any[] }>(`/orgs/${orgId}/installations`, token).catch(() => ({ installations: [] })),
+    backendFetch<{ repositories: any[] }>(`/orgs/${orgId}/repositories`, token).catch(() => ({ repositories: [] })),
+    backendFetch<{ capabilities: any[] }>(`/orgs/${orgId}/capabilities`, token).catch(() => ({ capabilities: [] })),
+  ]);
+
+  const installations = installsResp.installations || [];
+  const connectedRepos = reposResp.repositories || [];
+  const capabilities = capsResp.capabilities || [];
+
+  // Fetch available repos per installation in parallel
   const reposByInstall: Record<number, any[]> = {};
-  for (const install of installations) {
-    try {
-      const list = await backendFetch<{ repositories: any[] }>(
-        `/installations/${install.installation_id}/repos`,
-        token
-      );
-      reposByInstall[install.installation_id] = list.repositories || [];
-    } catch (e) {
-      if (isUnauthorizedBackendError(e)) {
-        redirect("/?login=1&error=session_expired");
+  await Promise.all(
+    installations.map(async (install: any) => {
+      try {
+        const list = await backendFetch<{ repositories: any[] }>(
+          `/installations/${install.installation_id}/repos`, token
+        );
+        reposByInstall[install.installation_id] = list.repositories || [];
+      } catch {
+        reposByInstall[install.installation_id] = [];
       }
-      throw e;
-    }
-  }
+    })
+  );
 
   return (
-    <div className="space-y-6">
-      <Breadcrumbs items={[{ label: "Dashboard", href: "/dashboard" }, { label: "Repositories" }]} className="mb-4" />
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-2xl font-semibold">Repositories</h1>
-          <p className="text-mutedForeground">
-            Select a repository under an installation for org <span className="font-semibold">{selectedOrgId}</span>.
-          </p>
-        </div>
-        <Link href="/dashboard">
-          <Button variant="outline">Back to dashboard</Button>
-        </Link>
-      </div>
-
-      <ReposList
-        initialInstallations={installations}
-        initialReposByInstall={reposByInstall}
-        initialConnectedRepos={connectedRepos}
-        orgId={selectedOrgId}
-        token={token}
-      />
-
-      {installations.length === 0 ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Need help getting started?</CardTitle>
-            <CardDescription>
-              You can connect another GitHub org or open existing org docs if this workspace was already onboarded.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-wrap gap-2">
-            <Link href="/dashboard/connect-github">
-              <Button>Connect GitHub org</Button>
-            </Link>
-            <Link href={`/dashboard/orgs/${encodeURIComponent(selectedOrgId)}/docs`}>
-              <Button variant="outline">View org docs</Button>
-            </Link>
-          </CardContent>
-        </Card>
-      ) : null}
-    </div>
+    <ReposList
+      initialInstallations={installations}
+      initialReposByInstall={reposByInstall}
+      initialConnectedRepos={connectedRepos}
+      initialCapabilities={capabilities}
+      orgId={orgId}
+      token={token}
+    />
   );
 }
 
 export default function ReposPage({ searchParams }: Props) {
   return (
-    <Suspense fallback={<ReposSkeleton />}>
+    <Suspense
+      fallback={
+        <div className="space-y-4 animate-pulse">
+          <div className="h-10 bg-muted rounded w-48" />
+          <div className="h-4 bg-muted rounded w-64" />
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+            {[1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-40 bg-muted rounded-xl" />
+            ))}
+          </div>
+        </div>
+      }
+    >
       <ReposContent searchParams={searchParams} />
     </Suspense>
   );

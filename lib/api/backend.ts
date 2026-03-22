@@ -243,6 +243,73 @@ export async function cancelIngestionJob(jobId: number, token: string) {
   );
 }
 
+export async function deleteWorkspace(orgId: string, token: string) {
+  return backendFetch<{ deleted: boolean }>(`/orgs/${orgId}`, token, { method: "DELETE" });
+}
+
+export async function getDashboardData(orgId: string, token: string) {
+  return backendFetch<{
+    repositories: any[];
+    org_doc_count: number;
+    installation_count: number;
+    capability_count: number;
+    has_installation: boolean;
+  }>(`/orgs/${orgId}/dashboard-data`, token);
+}
+
+export async function getWikiData(orgId: string, token: string) {
+  return backendFetch<{
+    org_documents: any[];
+    repositories: {
+      id: number;
+      full_name: string;
+      default_branch: string;
+      wiki_pages: { id: number; slug: string; title: string; category: string }[];
+    }[];
+    capabilities: any[];
+  }>(`/orgs/${orgId}/wiki-data`, token);
+}
+
+export async function createCapability(
+  orgId: string,
+  data: { name: string; description?: string; parent_capability_id?: string },
+  token: string
+) {
+  return backendFetch<any>(`/orgs/${orgId}/capabilities`, token, {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function updateCapability(
+  orgId: string,
+  capId: string,
+  data: { name?: string; description?: string },
+  token: string
+) {
+  return backendFetch<any>(`/orgs/${orgId}/capabilities/${capId}`, token, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteCapability(orgId: string, capId: string, token: string) {
+  return backendFetch<any>(`/orgs/${orgId}/capabilities/${capId}`, token, { method: "DELETE" });
+}
+
+export async function assignServiceToCapability(orgId: string, capId: string, repoId: number, token: string) {
+  return backendFetch<any>(`/orgs/${orgId}/capabilities/${capId}/services`, token, {
+    method: "POST",
+    body: JSON.stringify({ repository_id: repoId }),
+  });
+}
+
+export async function unassignServiceFromCapability(orgId: string, capId: string, repoId: number, token: string) {
+  return backendFetch<any>(`/orgs/${orgId}/capabilities/${capId}/services/${repoId}`, token, {
+    method: "DELETE",
+  });
+}
+
 export async function chatStream(
   token: string,
   body: { query: string; repo_ids?: number[]; history?: { role: string; content: string }[] },

@@ -3,16 +3,61 @@
 import * as React from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { ArrowRight, Book, Database, FileText, Github, Loader2, Zap } from "lucide-react";
+import {
+  ArrowRight,
+  Book,
+  FolderTree,
+  Github,
+  Loader2,
+  Map,
+  MessageSquare,
+  Network,
+  RefreshCw,
+  Zap,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Modal } from "@/components/ui/modal";
 import { LoginForm } from "@/app/login/login-form";
+import { ThemeToggle } from "@/components/theme-toggle";
 
 type HomeClientProps = {
   initialLoginOpen?: boolean;
   initialError?: string | null;
 };
+
+const features = [
+  {
+    icon: Network,
+    title: "Architecture Map",
+    desc: "Interactive service graph with capability grouping and dependency visualization.",
+  },
+  {
+    icon: Book,
+    title: "Living Wiki",
+    desc: "Auto-generated docs that stay in sync with every push. Module-level detail.",
+  },
+  {
+    icon: MessageSquare,
+    title: "AI Chat",
+    desc: "Ask questions about your architecture, dependencies, and code flow with citations.",
+  },
+  {
+    icon: FolderTree,
+    title: "Capability Hierarchy",
+    desc: "Organize services into business domains: L0-L3 hierarchy.",
+  },
+  {
+    icon: RefreshCw,
+    title: "Always Fresh",
+    desc: "Webhooks trigger incremental re-analysis. Only changed files re-scanned.",
+  },
+  {
+    icon: Github,
+    title: "GitHub Native",
+    desc: "Install the GitHub App, pick repos, docs generate automatically.",
+  },
+];
 
 export function HomeClient({ initialLoginOpen = false, initialError }: HomeClientProps) {
   const router = useRouter();
@@ -40,29 +85,23 @@ export function HomeClient({ initialLoginOpen = false, initialError }: HomeClien
 
   function handleSignIn() {
     if (navigating) return;
-    // Clear the error param from the URL immediately so a stale error isn't
-    // visible if the new attempt redirects back to this page.
-    const next = new URLSearchParams(searchParams.toString());
-    next.delete("error");
-    next.set("login", "1");
-    const qs = next.toString();
-    router.replace(qs ? `${pathname}?${qs}` : pathname);
     setNavigating(true);
-    // Navigate to the server-side OAuth route. The full-page overlay prevents
-    // the user from clicking again while the browser waits for the server
-    // redirect (can take 1-3 s on cold starts).
     window.location.href = "/auth/login";
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col font-sans">
-      <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-        <div className="container mx-auto flex h-14 max-w-screen-2xl items-center justify-between px-6">
-          <Link href="/" className="flex items-center gap-2 font-bold text-xl tracking-tight text-primary">
-            <Book className="h-6 w-6" />
-            <span>ArchTruth</span>
+    <div className="min-h-screen bg-background flex flex-col">
+      {/* Header */}
+      <header className="sticky top-0 z-50 w-full border-b bg-background/80 backdrop-blur-sm">
+        <div className="container mx-auto flex h-14 max-w-screen-xl items-center justify-between px-6">
+          <Link href="/" className="flex items-center gap-2 font-bold text-lg">
+            <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
+              <Book className="h-3.5 w-3.5" />
+            </div>
+            ArchTruth
           </Link>
-          <nav className="flex items-center gap-4">
+          <nav className="flex items-center gap-3">
+            <ThemeToggle />
             <Button variant="ghost" size="sm" onClick={() => setLoginOpenAndSyncUrl(true)}>
               Sign in
             </Button>
@@ -74,100 +113,70 @@ export function HomeClient({ initialLoginOpen = false, initialError }: HomeClien
       </header>
 
       <main className="flex-1">
-        <section className="flex min-h-[calc(100vh-3.5rem)] flex-col items-center justify-center space-y-6 py-8 md:py-12 lg:py-24">
-          <div className="container mx-auto flex max-w-[64rem] flex-col items-center gap-6 px-6 text-center">
-            <h1 className="font-heading text-4xl font-bold sm:text-5xl md:text-6xl lg:text-7xl">
-              Documentation that <br /> writes itself.
+        {/* Hero */}
+        <section className="flex flex-col items-center justify-center py-24 md:py-32 lg:py-40 px-6">
+          <div className="max-w-3xl text-center space-y-6">
+            <h1 className="text-4xl font-bold tracking-tight sm:text-5xl md:text-6xl lg:text-7xl bg-gradient-to-br from-foreground to-foreground/60 bg-clip-text text-transparent">
+              Your codebase, understood.
             </h1>
-            <p className="max-w-[42rem] leading-normal text-mutedForeground sm:text-xl sm:leading-8">
-              Connect your repositories and let our AI agents generate comprehensive, up-to-date documentation.
-              Architecture diagrams, API specs, and more—automatically.
+            <p className="mx-auto max-w-xl text-lg text-muted-foreground leading-relaxed">
+              ArchTruth maps your microservices architecture, generates living documentation,
+              and lets you chat with your entire codebase — powered by AI.
             </p>
-            <div className="flex flex-wrap items-center justify-center gap-4">
-              <Button size="lg" className="h-12 px-8 text-lg" onClick={() => setLoginOpenAndSyncUrl(true)}>
-                Start Building <ArrowRight className="ml-2 h-4 w-4" />
+            <div className="flex flex-wrap items-center justify-center gap-4 pt-2">
+              <Button size="lg" className="h-12 px-8 gap-2" onClick={() => setLoginOpenAndSyncUrl(true)}>
+                Get Started with GitHub <ArrowRight className="h-4 w-4" />
               </Button>
-              <Link href="#features">
-                <Button variant="outline" size="lg" className="h-12 px-8 text-lg">
-                  Learn More
+              <a href="#features">
+                <Button variant="outline" size="lg" className="h-12 px-8">
+                  See how it works
                 </Button>
-              </Link>
+              </a>
             </div>
           </div>
         </section>
 
-        <section id="features" className="container mx-auto space-y-12 py-12 md:py-24 lg:py-32 px-6">
-          <div className="mx-auto flex max-w-[58rem] flex-col items-center space-y-4 text-center">
-            <h2 className="font-heading text-3xl font-bold leading-[1.1] sm:text-3xl md:text-6xl">Features</h2>
-            <p className="max-w-[85%] leading-normal text-mutedForeground sm:text-lg sm:leading-7">
-              Built using latest LLMs to deliver accurate technical documentation.
-            </p>
+        {/* Features */}
+        <section id="features" className="py-20 px-6 border-t bg-muted/30">
+          <div className="container mx-auto max-w-screen-xl">
+            <h2 className="text-3xl font-bold text-center mb-12">How it works</h2>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              {features.map((f) => (
+                <Card key={f.title} className="hover:shadow-md transition-shadow duration-200">
+                  <CardContent className="p-6">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 mb-4">
+                      <f.icon className="h-5 w-5 text-primary" />
+                    </div>
+                    <h3 className="font-semibold mb-2">{f.title}</h3>
+                    <p className="text-sm text-muted-foreground leading-relaxed">{f.desc}</p>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           </div>
-          <div className="mx-auto flex flex-wrap justify-center gap-6 md:max-w-[64rem]">
-            <Card className="flex w-full max-w-[300px] flex-col items-center text-center p-4">
-              <CardHeader>
-                <Github className="h-10 w-10 text-primary mb-2" />
-                <CardTitle>GitHub Integration</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-mutedForeground">
-                  Seamlessly connect your organizations and repositories with our GitHub App.
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="flex w-full max-w-[300px] flex-col items-center text-center p-4">
-              <CardHeader>
-                <Zap className="h-10 w-10 text-primary mb-2" />
-                <CardTitle>Instant Analysis</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-mutedForeground">
-                  Our agents scan your codebase to understand structure, dependencies, and logic.
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="flex w-full max-w-[300px] flex-col items-center text-center p-4">
-              <CardHeader>
-                <FileText className="h-10 w-10 text-primary mb-2" />
-                <CardTitle>Auto-Docs</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-mutedForeground">
-                  Get READMEs, API references, and architecture overviews generated automatically.
-                </p>
-              </CardContent>
-            </Card>
-            <Card className="flex w-full max-w-[300px] flex-col items-center text-center p-4">
-              <CardHeader>
-                <Database className="h-10 w-10 text-primary mb-2" />
-                <CardTitle>Knowledge Base</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-mutedForeground">
-                  Chat with your documentation to find answers instantly.
-                </p>
-              </CardContent>
-            </Card>
-          </div>
+        </section>
+
+        {/* CTA */}
+        <section className="py-20 px-6 text-center">
+          <h2 className="text-2xl font-bold mb-4">Ready to understand your codebase?</h2>
+          <Button size="lg" className="h-12 px-8 gap-2" onClick={() => setLoginOpenAndSyncUrl(true)}>
+            Get Started <ArrowRight className="h-4 w-4" />
+          </Button>
         </section>
       </main>
 
-      <footer className="border-t py-6 md:py-0">
-        <div className="container mx-auto flex flex-col items-center justify-between gap-4 md:h-24 md:flex-row px-6">
-          <p className="text-center text-sm leading-loose text-mutedForeground md:text-left">
-            Built by{" "}
-            <a href="#" className="font-medium underline underline-offset-4">
-              ArchTruth
-            </a>
-          </p>
+      {/* Footer */}
+      <footer className="border-t py-6">
+        <div className="container mx-auto flex items-center justify-center px-6">
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Book className="h-3.5 w-3.5" />
+            ArchTruth
+          </div>
         </div>
       </footer>
 
-      <Modal
-        open={loginOpen}
-        onOpenChange={setLoginOpenAndSyncUrl}
-        title="Sign in to ArchTruth"
-      >
+      {/* Login Modal */}
+      <Modal open={loginOpen} onOpenChange={setLoginOpenAndSyncUrl} title="Sign in to ArchTruth">
         <LoginForm variant="embedded" error={error} onSignIn={handleSignIn} />
       </Modal>
 
@@ -180,5 +189,3 @@ export function HomeClient({ initialLoginOpen = false, initialError }: HomeClien
     </div>
   );
 }
-
-

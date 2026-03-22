@@ -13,6 +13,14 @@ import {
   listIngestionTasks,
   disconnectRepo,
   cancelIngestionJob,
+  deleteWorkspace,
+  getDashboardData,
+  getWikiData,
+  createCapability,
+  updateCapability,
+  deleteCapability,
+  assignServiceToCapability,
+  unassignServiceFromCapability,
 } from "@/lib/api/backend-client";
 
 // ── Query key factories ──
@@ -213,6 +221,88 @@ export function useQueueRepo(orgId: string | undefined, token: string | null | u
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: queryKeys.orgRepos(orgId!) });
       qc.invalidateQueries({ queryKey: queryKeys.syncStatus(orgId!) });
+    },
+  });
+}
+
+export function useDashboardData(orgId: string | undefined, token: string | null | undefined) {
+  return useQuery({
+    queryKey: ["dashboard-data", orgId] as const,
+    queryFn: () => getDashboardData(orgId!, token!),
+    enabled: !!orgId && !!token,
+    staleTime: 30 * 1000,
+  });
+}
+
+export function useWikiData(orgId: string | undefined, token: string | null | undefined) {
+  return useQuery({
+    queryKey: ["wiki-data", orgId] as const,
+    queryFn: () => getWikiData(orgId!, token!),
+    enabled: !!orgId && !!token,
+    staleTime: 60 * 1000,
+  });
+}
+
+export function useDeleteWorkspace(token: string | null | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (orgId: string) => deleteWorkspace(orgId, token!),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.orgs() });
+    },
+  });
+}
+
+export function useCreateCapability(orgId: string | undefined, token: string | null | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (data: { name: string; description?: string; parent_capability_id?: string }) =>
+      createCapability(orgId!, data, token!),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.capabilities(orgId!) });
+    },
+  });
+}
+
+export function useUpdateCapability(orgId: string | undefined, token: string | null | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ capId, data }: { capId: string; data: { name?: string; description?: string } }) =>
+      updateCapability(orgId!, capId, data, token!),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.capabilities(orgId!) });
+    },
+  });
+}
+
+export function useDeleteCapability(orgId: string | undefined, token: string | null | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (capId: string) => deleteCapability(orgId!, capId, token!),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.capabilities(orgId!) });
+    },
+  });
+}
+
+export function useAssignService(orgId: string | undefined, token: string | null | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ capId, repoId }: { capId: string; repoId: number }) =>
+      assignServiceToCapability(orgId!, capId, repoId, token!),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.capabilities(orgId!) });
+    },
+  });
+}
+
+export function useUnassignService(orgId: string | undefined, token: string | null | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ capId, repoId }: { capId: string; repoId: number }) =>
+      unassignServiceFromCapability(orgId!, capId, repoId, token!),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.capabilities(orgId!) });
     },
   });
 }

@@ -28,8 +28,11 @@ export default async function DashboardLayout({ children }: { children: ReactNod
       if (isUnauthorizedBackendError(e)) {
         redirect("/?login=1&error=session_expired");
       }
-      // Non-fatal: keep UI functional without org list.
     }
+  }
+
+  if (orgOptions.length === 0) {
+    redirect("/onboarding");
   }
 
   const currentOrgId = orgOptions[0]?.id;
@@ -48,4 +51,3 @@ export default async function DashboardLayout({ children }: { children: ReactNod
     </DashboardShell>
   );
 }
-
