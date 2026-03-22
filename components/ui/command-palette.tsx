@@ -10,15 +10,7 @@ import {
   CommandItem,
   CommandList,
 } from "cmdk";
-import {
-  Book,
-  Building2,
-  Home,
-  Layers,
-  Network,
-  Plus,
-  Settings,
-} from "lucide-react";
+import { Book, Home, Layers, Network, Plus, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export type CommandPaletteProps = {
@@ -29,7 +21,14 @@ export type CommandPaletteProps = {
 
 function buildHref(base: string, orgId?: string | null): string {
   if (!orgId) return base;
-  const needsOrg = ["/dashboard/repos", "/dashboard/wiki", "/dashboard/architecture", "/dashboard/connect-github"];
+  const needsOrg = [
+    "/dashboard",
+    "/dashboard/repos",
+    "/dashboard/wiki",
+    "/dashboard/architecture",
+    "/dashboard/settings",
+    "/dashboard/connect-github",
+  ];
   if (needsOrg.includes(base)) {
     return `${base}?org_id=${encodeURIComponent(orgId)}`;
   }
@@ -100,7 +99,12 @@ export function CommandPalette({ open, onOpenChange, orgId }: CommandPaletteProp
             <Network className="h-4 w-4 shrink-0 text-muted-foreground" />
             <span className="font-medium">Architecture</span>
           </CommandItem>
-          <CommandItem value="settings workspace" keywords={["settings", "workspace", "account"]} onSelect={() => go("/dashboard/settings")} className={itemClass}>
+          <CommandItem
+            value="settings workspace"
+            keywords={["settings", "workspace", "account"]}
+            onSelect={() => go(buildHref("/dashboard/settings", orgId))}
+            className={itemClass}
+          >
             <Settings className="h-4 w-4 shrink-0 text-muted-foreground" />
             <span className="font-medium">Settings</span>
           </CommandItem>

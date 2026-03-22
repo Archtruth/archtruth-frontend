@@ -3,6 +3,11 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { backendFetch, isUnauthorizedBackendError } from "@/lib/api/backend";
 import { getServerSession } from "@/lib/supabase/server";
+import {
+  needsOrgIdCanonicalization,
+  resolveDashboardOrgId,
+  withOrgSearchParams,
+} from "@/lib/dashboard-org-server";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -67,6 +72,27 @@ async function ConnectGithubContent({ searchParams }: { searchParams: Record<str
     redirect("/?login=1&error=session_expired");
   }
 
+  let archOrgs: { id: string; name: string }[] = [];
+  try {
+    const o = await backendFetch<{ organizations: { id: string; name: string }[] }>("/orgs", token);
+    archOrgs = o.organizations || [];
+  } catch (e) {
+    if (isUnauthorizedBackendError(e)) redirect("/?login=1&error=session_expired");
+  }
+
+  const urlOrgParam = Array.isArray(searchParams.org_id) ? searchParams.org_id[0] : searchParams.org_id;
+  if (archOrgs.length > 0) {
+    const resolved = resolveDashboardOrgId(archOrgs, urlOrgParam);
+    if (needsOrgIdCanonicalization(archOrgs, urlOrgParam)) {
+      redirect(withOrgSearchParams("/dashboard/connect-github", searchParams, resolved));
+    }
+  }
+
+  const dashboardBackHref =
+    archOrgs.length > 0
+      ? `/dashboard?org_id=${encodeURIComponent(resolveDashboardOrgId(archOrgs, urlOrgParam))}`
+      : "/dashboard";
+
   const providerToken = (session as any)?.provider_token as string | undefined;
 
   let githubOrgs: GithubOrgRow[] = [];
@@ -129,11 +155,11 @@ async function ConnectGithubContent({ searchParams }: { searchParams: Record<str
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-semibold">Connect GitHub App</h1>
-          <p className="text-mutedForeground">
+          <p className="text-muted-foreground">
             We’ll fetch your GitHub organizations, show what’s already connected, and let you join or install the app.
           </p>
         </div>
-        <Link href="/dashboard">
+        <Link href={dashboardBackHref}>
           <Button variant="outline">Back to dashboard</Button>
         </Link>
       </div>
@@ -147,13 +173,13 @@ async function ConnectGithubContent({ searchParams }: { searchParams: Record<str
         </CardHeader>
         <CardContent className="space-y-3">
           {githubError ? (
-            <div className="rounded-md border border-border bg-muted p-3 text-sm text-mutedForeground">
+            <div className="rounded-md border border-border bg-muted p-3 text-sm text-muted-foreground">
               {githubError} (Tip: make sure GitHub OAuth scope includes <code>read:org</code>.)
             </div>
           ) : null}
 
           {githubOrgs.length === 0 && !githubError ? (
-            <p className="text-sm text-mutedForeground">No GitHub organizations found for this account.</p>
+            <p className="text-sm text-muted-foreground">No GitHub organizations found for this account.</p>
           ) : null}
 
           {githubOrgs.length > 0 ? (
@@ -187,11 +213,11 @@ async function ConnectGithubContent({ searchParams }: { searchParams: Record<str
                           <Badge variant={badgeVariant as any}>{badgeText}</Badge>
                         </div>
                         {org.archtruth_org_name ? (
-                          <div className="text-xs text-mutedForeground">
+                          <div className="text-xs text-muted-foreground">
                             ArchTruth workspace: <span className="font-medium">{org.archtruth_org_name}</span>
                           </div>
                         ) : (
-                          <div className="text-xs text-mutedForeground">No ArchTruth workspace yet.</div>
+                          <div className="text-xs text-muted-foreground">No ArchTruth workspace yet.</div>
                         )}
                       </div>
                     </div>
@@ -220,7 +246,7 @@ async function ConnectGithubContent({ searchParams }: { searchParams: Record<str
 
           <div className="mt-4 rounded-md border border-dashed border-border bg-muted/50 p-3">
             <p className="mb-2 text-sm font-medium">Don&apos;t see your org?</p>
-            <p className="mb-3 text-xs text-mutedForeground">
+            <p className="mb-3 text-xs text-muted-foreground">
               If your GitHub org isn&apos;t listed above (e.g. new org, pagination limit, or re-login needed for <code>read:org</code>), enter the org login and we&apos;ll create a workspace and take you to install.
             </p>
             <form action={createWorkspaceAndInstall} className="flex flex-wrap gap-2">

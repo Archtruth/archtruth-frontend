@@ -2,6 +2,11 @@ import { Suspense } from "react";
 import { redirect } from "next/navigation";
 import { backendFetch, isUnauthorizedBackendError } from "@/lib/api/backend";
 import { getServerSession } from "@/lib/supabase/server";
+import {
+  needsOrgIdCanonicalization,
+  resolveDashboardOrgId,
+  withOrgSearchParams,
+} from "@/lib/dashboard-org-server";
 import { ReposList } from "./repos-list";
 
 type Props = {
@@ -13,8 +18,6 @@ async function ReposContent({ searchParams }: Props) {
   if (!session?.access_token) redirect("/?login=1&error=session_expired");
   const token = session.access_token;
 
-  const orgIdParam = Array.isArray(searchParams["org_id"]) ? searchParams["org_id"][0] : searchParams["org_id"];
-
   let orgs: { id: string; name: string }[] = [];
   try {
     const resp = await backendFetch<{ organizations: { id: string; name: string }[] }>("/orgs", token);
@@ -24,8 +27,13 @@ async function ReposContent({ searchParams }: Props) {
     throw e;
   }
 
-  const orgId = orgIdParam || orgs[0]?.id;
-  if (!orgId) redirect("/onboarding");
+  if (!orgs.length) redirect("/onboarding");
+
+  const orgIdParam = Array.isArray(searchParams["org_id"]) ? searchParams["org_id"][0] : searchParams["org_id"];
+  const orgId = resolveDashboardOrgId(orgs, orgIdParam);
+  if (needsOrgIdCanonicalization(orgs, orgIdParam)) {
+    redirect(withOrgSearchParams("/dashboard/repos", searchParams, orgId));
+  }
 
   // Parallel fetches
   const [installsResp, reposResp, capsResp] = await Promise.all([

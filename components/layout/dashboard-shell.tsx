@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { CommandPalette } from "@/components/ui/command-palette";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { cn } from "@/lib/utils";
+import { setPreferredOrganization } from "@/app/dashboard/actions/set-preferred-org";
 import {
   LogOut,
   Book,
@@ -37,7 +38,8 @@ type DashboardShellProps = {
   onLogout?: () => Promise<void> | void;
   onDeleteAccount?: () => Promise<void> | void;
   orgOptions?: OrgOption[];
-  currentOrgId?: string | null;
+  /** Default org when URL has no valid org_id (from cookie on server). */
+  preferredOrgId?: string | null;
 };
 
 export function DashboardShell({
@@ -45,62 +47,58 @@ export function DashboardShell({
   userName,
   userAvatar,
   onLogout,
-  onDeleteAccount,
+  onDeleteAccount: _onDeleteAccount,
   orgOptions,
-  currentOrgId,
+  preferredOrgId,
 }: DashboardShellProps) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const [orgId, setOrgId] = useState<string | undefined>(currentOrgId || orgOptions?.[0]?.id);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
   const [shortcutHint, setShortcutHint] = useState("Ctrl+K");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [orgDropdownOpen, setOrgDropdownOpen] = useState(false);
+  const [navPending, startNavTransition] = useTransition();
 
-  useEffect(() => {
-    const urlOrgId = searchParams.get("org_id");
-    if (urlOrgId) {
-      setOrgId(urlOrgId);
-      return;
-    }
-    if (currentOrgId) setOrgId(currentOrgId);
-    else if (orgOptions?.[0]?.id) setOrgId(orgOptions[0].id);
-  }, [searchParams, pathname, currentOrgId, orgOptions]);
+  const orgId = useMemo(() => {
+    const raw = searchParams.get("org_id");
+    if (raw && orgOptions?.some((o) => o.id === raw)) return raw;
+    return preferredOrgId || orgOptions?.[0]?.id || "";
+  }, [searchParams, orgOptions, preferredOrgId]);
 
-  const navItems: NavItem[] = useMemo(() => {
-    const oid = orgId ? `?org_id=${encodeURIComponent(orgId)}` : "";
-    return [
-      { label: "Overview", href: "/dashboard", icon: <Home className="h-4 w-4" /> },
-      { label: "Repositories", href: `/dashboard/repos${oid}`, icon: <Layers className="h-4 w-4" /> },
-      { label: "Wiki", href: `/dashboard/wiki${oid}`, icon: <Book className="h-4 w-4" /> },
-      { label: "Architecture", href: `/dashboard/architecture${oid}`, icon: <Network className="h-4 w-4" /> },
-    ];
-  }, [orgId]);
+  const orgQuery = orgId ? `?org_id=${encodeURIComponent(orgId)}` : "";
 
-  const settingsItem: NavItem = useMemo(() => ({
-    label: "Settings",
-    href: "/dashboard/settings",
-    icon: <Settings className="h-4 w-4" />,
-  }), []);
+  const navItems: NavItem[] = useMemo(
+    () => [
+      { label: "Overview", href: `/dashboard${orgQuery}`, icon: <Home className="h-4 w-4 shrink-0" /> },
+      { label: "Repositories", href: `/dashboard/repos${orgQuery}`, icon: <Layers className="h-4 w-4 shrink-0" /> },
+      { label: "Wiki", href: `/dashboard/wiki${orgQuery}`, icon: <Book className="h-4 w-4 shrink-0" /> },
+      { label: "Architecture", href: `/dashboard/architecture${orgQuery}`, icon: <Network className="h-4 w-4 shrink-0" /> },
+    ],
+    [orgQuery]
+  );
+
+  const settingsHref = `/dashboard/settings${orgQuery}`;
 
   const isActive = (href: string) => {
     if (!pathname) return false;
     const base = href.split("?")[0];
     if (base === "/dashboard") return pathname === "/dashboard";
-    return pathname.startsWith(base);
+    return pathname === base || pathname.startsWith(`${base}/`);
   };
 
   const currentOrg = orgOptions?.find((o) => o.id === orgId);
 
-  const handleOrgSwitch = (id: string) => {
-    setOrgId(id);
+  const handleOrgSwitch = async (id: string) => {
     setOrgDropdownOpen(false);
-    if (pathname && pathname !== "/dashboard" && pathname !== "/dashboard/settings") {
-      const base = pathname.split("?")[0];
-      router.push(`${base}?org_id=${encodeURIComponent(id)}`);
-    }
-    router.refresh();
+    await setPreferredOrganization(id);
+    const path = pathname || "/dashboard";
+    const next = new URLSearchParams(searchParams.toString());
+    next.set("org_id", id);
+    const tail = next.toString();
+    startNavTransition(() => {
+      router.push(tail ? `${path}?${tail}` : path);
+    });
   };
 
   useEffect(() => {
@@ -112,11 +110,42 @@ export function DashboardShell({
     setMobileOpen(false);
   }, [pathname]);
 
+  /** Keep server cookie aligned with the URL when navigating via sidebar links. */
+  const searchKey = searchParams.toString();
+  useEffect(() => {
+    const id = new URLSearchParams(searchKey).get("org_id");
+    if (id && orgOptions?.some((o) => o.id === id)) {
+      void setPreferredOrganization(id);
+    }
+  }, [searchKey, orgOptions]);
+
+  useEffect(() => {
+    if (!orgDropdownOpen) return;
+    const onDocMouseDown = (e: MouseEvent) => {
+      const el = document.getElementById("org-switcher-root");
+      if (el && !el.contains(e.target as Node)) setOrgDropdownOpen(false);
+    };
+    document.addEventListener("mousedown", onDocMouseDown);
+    return () => document.removeEventListener("mousedown", onDocMouseDown);
+  }, [orgDropdownOpen]);
+
+  const navLinkClass = (active: boolean) =>
+    cn(
+      "flex items-center gap-2.5 rounded-lg px-3 py-2.5 text-sm font-medium outline-none transition-colors duration-150",
+      "focus-visible:ring-2 focus-visible:ring-sidebar-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar",
+      active
+        ? "bg-sidebar-accent text-sidebar-accent-foreground shadow-sm"
+        : "text-sidebar-foreground/80 hover:bg-sidebar-accent/60 hover:text-sidebar-foreground"
+    );
+
   const sidebarContent = (
     <>
       <div className="px-4 pt-5 pb-3">
-        <Link href="/dashboard" className="flex items-center gap-2 text-sidebar-foreground">
-          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-primary text-primary-foreground">
+        <Link
+          href={`/dashboard${orgQuery}`}
+          className="flex items-center gap-2 rounded-lg text-sidebar-foreground outline-none ring-sidebar-ring transition-colors hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
+        >
+          <div className="flex h-7 w-7 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
             <Book className="h-3.5 w-3.5" />
           </div>
           <span className="text-sm font-semibold tracking-tight">ArchTruth</span>
@@ -124,30 +153,32 @@ export function DashboardShell({
       </div>
 
       {orgOptions && orgOptions.length > 0 && (
-        <div className="px-3 pb-4">
+        <div className="px-3 pb-4" id="org-switcher-root">
           <div className="relative">
             <button
+              type="button"
               onClick={() => setOrgDropdownOpen(!orgDropdownOpen)}
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-sidebar-foreground hover:bg-white/10 transition-colors"
+              className="flex w-full items-center gap-2 rounded-lg border border-transparent px-3 py-2 text-sm text-sidebar-foreground outline-none transition-colors hover:bg-sidebar-accent/50 focus-visible:ring-2 focus-visible:ring-sidebar-ring"
             >
-              <div className="flex h-6 w-6 items-center justify-center rounded-md bg-primary/20 text-primary text-xs font-bold">
+              <div className="flex h-6 w-6 items-center justify-center rounded-md bg-sidebar-primary/30 text-xs font-bold text-sidebar-primary-foreground">
                 {currentOrg?.name?.[0]?.toUpperCase() || "?"}
               </div>
-              <span className="flex-1 truncate text-left font-medium">{currentOrg?.name || "Select workspace"}</span>
-              <ChevronDown className={cn("h-3.5 w-3.5 transition-transform", orgDropdownOpen && "rotate-180")} />
+              <span className="flex-1 truncate text-left font-medium">{currentOrg?.name || "Workspace"}</span>
+              <ChevronDown className={cn("h-3.5 w-3.5 shrink-0 transition-transform", orgDropdownOpen && "rotate-180")} />
             </button>
             {orgDropdownOpen && (
-              <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-lg border border-white/10 bg-sidebar p-1 shadow-xl">
+              <div className="absolute left-0 right-0 top-full z-50 mt-1 rounded-lg border border-sidebar-border bg-sidebar p-1 shadow-xl">
                 {orgOptions.map((org) => (
                   <button
                     key={org.id}
-                    onClick={() => handleOrgSwitch(org.id)}
+                    type="button"
+                    onClick={() => void handleOrgSwitch(org.id)}
                     className={cn(
-                      "flex w-full items-center gap-2 rounded-md px-3 py-2 text-sm text-sidebar-foreground hover:bg-white/10 transition-colors",
-                      org.id === orgId && "bg-white/10"
+                      "flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-sidebar-foreground transition-colors hover:bg-sidebar-accent/70",
+                      org.id === orgId && "bg-sidebar-accent text-sidebar-accent-foreground"
                     )}
                   >
-                    <div className="flex h-5 w-5 items-center justify-center rounded text-xs font-bold bg-primary/20 text-primary">
+                    <div className="flex h-5 w-5 items-center justify-center rounded text-xs font-bold bg-sidebar-primary/30 text-sidebar-primary-foreground">
                       {org.name[0]?.toUpperCase()}
                     </div>
                     {org.name}
@@ -159,37 +190,32 @@ export function DashboardShell({
         </div>
       )}
 
-      <nav className="flex-1 space-y-0.5 px-3">
+      <nav className="flex flex-1 flex-col gap-0.5 px-3" aria-label="Main">
         {navItems.map((item) => (
-          <Link key={item.label} href={item.href} className="block">
-            <div
-              className={cn(
-                "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-150",
-                isActive(item.href)
-                  ? "bg-white/15 text-white border-l-2 border-primary"
-                  : "text-sidebar-foreground/70 hover:bg-white/10 hover:text-sidebar-foreground"
-              )}
-            >
-              {item.icon}
-              {item.label}
-            </div>
+          <Link
+            key={item.label}
+            href={item.href}
+            prefetch
+            scroll={false}
+            aria-current={isActive(item.href) ? "page" : undefined}
+            className={navLinkClass(isActive(item.href))}
+          >
+            {item.icon}
+            {item.label}
           </Link>
         ))}
       </nav>
 
-      <div className="border-t border-white/10 px-3 py-3">
-        <Link href={settingsItem.href} className="block">
-          <div
-            className={cn(
-              "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm font-medium transition-colors duration-150",
-              isActive(settingsItem.href)
-                ? "bg-white/15 text-white border-l-2 border-primary"
-                : "text-sidebar-foreground/70 hover:bg-white/10 hover:text-sidebar-foreground"
-            )}
-          >
-            {settingsItem.icon}
-            {settingsItem.label}
-          </div>
+      <div className="border-t border-sidebar-border px-3 py-3">
+        <Link
+          href={settingsHref}
+          prefetch
+          scroll={false}
+          aria-current={isActive(settingsHref) ? "page" : undefined}
+          className={navLinkClass(isActive(settingsHref))}
+        >
+          <Settings className="h-4 w-4 shrink-0" />
+          Settings
         </Link>
       </div>
     </>
@@ -197,18 +223,27 @@ export function DashboardShell({
 
   return (
     <div className="flex h-screen overflow-hidden bg-background text-foreground">
-      {/* Desktop Sidebar */}
-      <aside className="hidden md:flex md:w-64 md:flex-col md:shrink-0 bg-sidebar">
+      <aside className="hidden md:flex md:w-64 md:flex-col md:shrink-0 bg-sidebar text-sidebar-foreground">
         {sidebarContent}
       </aside>
 
-      {/* Mobile Overlay */}
       {mobileOpen && (
         <div className="fixed inset-0 z-50 md:hidden">
-          <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setMobileOpen(false)} />
-          <aside className="absolute left-0 top-0 bottom-0 w-64 bg-sidebar flex flex-col animate-in slide-in-from-left duration-200">
+          <button
+            type="button"
+            aria-label="Close menu"
+            className="absolute inset-0 bg-black/50 backdrop-blur-sm"
+            onClick={() => setMobileOpen(false)}
+          />
+          <aside className="absolute left-0 top-0 bottom-0 flex w-64 flex-col bg-sidebar text-sidebar-foreground animate-in slide-in-from-left duration-200">
             <div className="flex justify-end p-2">
-              <Button variant="ghost" size="icon" onClick={() => setMobileOpen(false)} className="text-sidebar-foreground hover:bg-white/10">
+              <Button
+                variant="ghost"
+                size="icon"
+                type="button"
+                onClick={() => setMobileOpen(false)}
+                className="text-sidebar-foreground hover:bg-sidebar-accent/50"
+              >
                 <X className="h-4 w-4" />
               </Button>
             </div>
@@ -217,37 +252,30 @@ export function DashboardShell({
         </div>
       )}
 
-      {/* Main Area */}
-      <div className="flex flex-1 flex-col overflow-hidden">
-        {/* Header */}
-        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-card px-4">
-          <Button
-            variant="ghost"
-            size="icon"
-            className="md:hidden h-9 w-9"
-            onClick={() => setMobileOpen(true)}
-          >
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <header className="flex h-14 shrink-0 items-center gap-3 border-b border-border bg-card px-4 text-card-foreground">
+          <Button variant="ghost" size="icon" type="button" className="md:hidden h-9 w-9" onClick={() => setMobileOpen(true)}>
             <Menu className="h-4 w-4" />
           </Button>
 
-          <div className="hidden sm:flex flex-1 max-w-lg">
+          <div className="hidden max-w-lg flex-1 sm:flex">
             <Button
               type="button"
               variant="outline"
-              className="h-9 w-full justify-start gap-2 pl-3 pr-2 text-left font-normal text-muted-foreground shadow-sm"
+              className="h-9 w-full justify-start gap-2 border-border bg-background pl-3 pr-2 text-left font-normal text-muted-foreground shadow-sm hover:bg-accent hover:text-accent-foreground"
               onClick={() => setCommandPaletteOpen(true)}
             >
               <Search className="h-4 w-4 shrink-0" />
               <span className="flex-1 truncate text-sm">Search or jump to…</span>
-              <kbd className="hidden sm:inline-flex h-5 shrink-0 items-center rounded border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground">
+              <kbd className="hidden h-5 shrink-0 items-center rounded border border-border bg-muted px-1.5 font-mono text-[10px] font-medium text-muted-foreground sm:inline-flex">
                 {shortcutHint}
               </kbd>
             </Button>
           </div>
 
-          <div className="flex items-center gap-2 ml-auto">
+          <div className="ml-auto flex items-center gap-2">
             <ThemeToggle />
-            <span className="hidden sm:inline text-sm font-medium">{userName || "User"}</span>
+            <span className="hidden text-sm font-medium sm:inline">{userName || "User"}</span>
             <Avatar className="h-8 w-8">
               <AvatarImage src={userAvatar || ""} alt={userName || "User"} />
               <AvatarFallback className="text-xs">{userName ? userName[0]?.toUpperCase() : <User className="h-3.5 w-3.5" />}</AvatarFallback>
@@ -263,13 +291,17 @@ export function DashboardShell({
           </div>
         </header>
 
-        {/* Content */}
-        <main className="flex-1 overflow-y-auto p-6">
+        <main
+          className={cn(
+            "flex-1 overflow-y-auto p-6 transition-opacity duration-150",
+            navPending && "opacity-[0.92]"
+          )}
+        >
           {children}
         </main>
       </div>
 
-      <CommandPalette open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen} orgId={orgId} />
+      <CommandPalette open={commandPaletteOpen} onOpenChange={setCommandPaletteOpen} orgId={orgId || null} />
     </div>
   );
 }

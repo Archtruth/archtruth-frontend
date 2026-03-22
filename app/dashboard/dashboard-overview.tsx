@@ -73,7 +73,12 @@ export function DashboardOverview({ orgId, orgName, userName, dashboardData, tok
   const quickActions = [
     { label: "Browse Wiki", desc: "Explore documentation for all services", href: `/dashboard/wiki?org_id=${orgId}`, icon: Book },
     { label: "Architecture", desc: "View capability map and service graph", href: `/dashboard/architecture?org_id=${orgId}`, icon: Network },
-    { label: "Settings", desc: "Manage workspace and GitHub connection", href: "/dashboard/settings", icon: Settings },
+    {
+      label: "Settings",
+      desc: "Manage workspace and GitHub connection",
+      href: `/dashboard/settings?org_id=${orgId}`,
+      icon: Settings,
+    },
   ];
 
   if (repos.length === 0) {
@@ -126,7 +131,7 @@ export function DashboardOverview({ orgId, orgName, userName, dashboardData, tok
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {quickActions.map((action) => (
-          <Link key={action.label} href={action.href}>
+          <Link key={action.label} href={action.href} className="block h-full" prefetch scroll={false}>
             <Card className="h-full hover:shadow-md transition-shadow duration-200 cursor-pointer group">
               <CardContent className="p-5">
                 <div className="flex items-start gap-3">
@@ -186,7 +191,7 @@ export function DashboardOverview({ orgId, orgName, userName, dashboardData, tok
                         </Button>
                       </Link>
                     ) : repo.latest_job?.status === "processing" ? (
-                      <span className="text-sm text-blue-600 animate-pulse">Scanning...</span>
+                      <span className="text-sm text-blue-600 dark:text-blue-400 animate-pulse">Scanning...</span>
                     ) : null}
                   </div>
                 </CardContent>

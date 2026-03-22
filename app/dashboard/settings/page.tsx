@@ -1,10 +1,19 @@
 import { redirect } from "next/navigation";
 import { getServerSession } from "@/lib/supabase/server";
 import { backendFetch, isUnauthorizedBackendError } from "@/lib/api/backend";
+import {
+  needsOrgIdCanonicalization,
+  resolveDashboardOrgId,
+  withOrgSearchParams,
+} from "@/lib/dashboard-org-server";
 import { SettingsClient } from "./settings-client";
 import { deleteAccountAction } from "@/lib/supabase/delete-account-action";
 
-export default async function SettingsPage() {
+export default async function SettingsPage({
+  searchParams,
+}: {
+  searchParams: { [key: string]: string | string[] | undefined };
+}) {
   const session = await getServerSession();
   if (!session?.access_token) redirect("/?login=1&error=session_expired");
   const token = session.access_token;
@@ -17,9 +26,14 @@ export default async function SettingsPage() {
     if (isUnauthorizedBackendError(e)) redirect("/?login=1&error=session_expired");
   }
 
-  const orgId = orgs[0]?.id;
-  const orgName = orgs[0]?.name || "Workspace";
-  if (!orgId) redirect("/onboarding");
+  if (!orgs.length) redirect("/onboarding");
+
+  const urlOrg = Array.isArray(searchParams.org_id) ? searchParams.org_id[0] : searchParams.org_id;
+  const orgId = resolveDashboardOrgId(orgs, urlOrg);
+  if (needsOrgIdCanonicalization(orgs, urlOrg)) {
+    redirect(withOrgSearchParams("/dashboard/settings", searchParams, orgId));
+  }
+  const orgName = orgs.find((o) => o.id === orgId)?.name || "Workspace";
 
   let installationInfo: any = null;
   try {

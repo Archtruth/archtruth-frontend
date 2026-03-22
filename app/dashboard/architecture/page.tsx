@@ -1,6 +1,11 @@
 import { redirect } from "next/navigation";
 import { getServerSession } from "@/lib/supabase/server";
 import { backendFetch, isUnauthorizedBackendError } from "@/lib/api/backend";
+import {
+  needsOrgIdCanonicalization,
+  resolveDashboardOrgId,
+  withOrgSearchParams,
+} from "@/lib/dashboard-org-server";
 import { ArchitectureClient } from "./architecture-client";
 
 type Props = {
@@ -21,9 +26,13 @@ export default async function ArchitecturePage({ searchParams }: Props) {
     throw e;
   }
 
+  if (!orgs.length) redirect("/onboarding");
+
   const orgIdParam = Array.isArray(searchParams["org_id"]) ? searchParams["org_id"][0] : searchParams["org_id"];
-  const orgId = orgIdParam || orgs[0]?.id;
-  if (!orgId) redirect("/onboarding");
+  const orgId = resolveDashboardOrgId(orgs, orgIdParam);
+  if (needsOrgIdCanonicalization(orgs, orgIdParam)) {
+    redirect(withOrgSearchParams("/dashboard/architecture", searchParams, orgId));
+  }
 
   const [capsResp, reposResp] = await Promise.all([
     backendFetch<{ capabilities: any[] }>(`/orgs/${orgId}/capabilities`, token).catch(() => ({ capabilities: [] })),

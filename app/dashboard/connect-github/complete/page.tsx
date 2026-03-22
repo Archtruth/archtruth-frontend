@@ -15,6 +15,9 @@ export default async function ConnectGithubComplete({ searchParams }: Props) {
   const installationId = Array.isArray(installationIdRaw) ? installationIdRaw[0] : installationIdRaw;
   const stateOrgRaw = searchParams["state"];
   const stateOrg = Array.isArray(stateOrgRaw) ? stateOrgRaw[0] : stateOrgRaw;
+  const connectGithubHref = stateOrg
+    ? `/dashboard/connect-github?org_id=${encodeURIComponent(stateOrg)}`
+    : "/dashboard/connect-github";
 
   if (!installationId) {
     return (
@@ -45,7 +48,7 @@ export default async function ConnectGithubComplete({ searchParams }: Props) {
           <p className="text-sm text-muted-foreground">
             Please restart the GitHub App installation from the Connect GitHub page.
           </p>
-          <Link href="/dashboard/connect-github">
+          <Link href={connectGithubHref}>
             <Button variant="outline">Go back</Button>
           </Link>
         </CardContent>
@@ -68,7 +71,7 @@ export default async function ConnectGithubComplete({ searchParams }: Props) {
         <CardContent className="p-6 text-center space-y-4">
           <div className="flex justify-center">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-emerald-500/10">
-              <Check className="h-7 w-7 text-emerald-600" />
+              <Check className="h-7 w-7 text-emerald-600 dark:text-emerald-400" />
             </div>
           </div>
           <h2 className="text-xl font-semibold">GitHub App Connected!</h2>
@@ -93,7 +96,7 @@ export default async function ConnectGithubComplete({ searchParams }: Props) {
           <AlertTriangle className="h-10 w-10 text-destructive mx-auto" />
           <h2 className="text-lg font-semibold">Connection failed</h2>
           <p className="text-sm text-muted-foreground">{String(err?.message || err)}</p>
-          <Link href="/dashboard/connect-github">
+          <Link href={connectGithubHref}>
             <Button variant="outline">Try again</Button>
           </Link>
         </CardContent>

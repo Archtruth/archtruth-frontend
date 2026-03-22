@@ -1,9 +1,18 @@
 import { redirect } from "next/navigation";
 import { getServerSession } from "@/lib/supabase/server";
 import { backendFetch, isUnauthorizedBackendError } from "@/lib/api/backend";
+import {
+  needsOrgIdCanonicalization,
+  resolveDashboardOrgId,
+  withOrgSearchParams,
+} from "@/lib/dashboard-org-server";
 import { DashboardOverview } from "./dashboard-overview";
 
-export default async function DashboardPage() {
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: { [key: string]: string | string[] | undefined };
+}) {
   const session = await getServerSession();
   if (!session?.access_token) {
     redirect("/?login=1&error=session_expired");
@@ -23,8 +32,13 @@ export default async function DashboardPage() {
     redirect("/onboarding");
   }
 
-  const orgId = orgs[0].id;
-  const orgName = orgs[0].name;
+  const urlOrg = Array.isArray(searchParams.org_id) ? searchParams.org_id[0] : searchParams.org_id;
+  const orgId = resolveDashboardOrgId(orgs, urlOrg);
+  if (needsOrgIdCanonicalization(orgs, urlOrg)) {
+    redirect(withOrgSearchParams("/dashboard", searchParams, orgId));
+  }
+
+  const orgName = orgs.find((o) => o.id === orgId)?.name || orgs[0].name;
   const userName = session.user?.user_metadata?.full_name || session.user?.user_metadata?.name || "there";
 
   let dashboardData: any = null;
