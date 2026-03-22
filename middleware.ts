@@ -48,6 +48,6 @@ export const config = {
     // Match all paths except static files and auth routes.
     // Exclude /auth/login and /auth/callback so middleware does not interfere with
     // the PKCE code_verifier cookie during OAuth redirects (cross-site from GitHub).
-    "/((?!_next/static|_next/image|favicon.ico|auth/login|auth/callback|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!_next/static|_next/image|favicon.ico|auth/login|auth/callback|auth/sign-out|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };

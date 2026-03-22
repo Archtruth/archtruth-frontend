@@ -7,10 +7,12 @@ import { Book, Github, Loader2 } from "lucide-react";
 type LoginFormProps = {
   variant?: "page" | "embedded";
   error?: string | null;
+  /** Non-error info (e.g. after account deletion). */
+  notice?: string | null;
   onSignIn?: () => void;
 };
 
-export function LoginForm({ variant = "page", error, onSignIn }: LoginFormProps) {
+export function LoginForm({ variant = "page", error, notice, onSignIn }: LoginFormProps) {
   const [isSigningIn, setIsSigningIn] = React.useState(false);
 
   function handleSignIn() {
@@ -33,6 +35,11 @@ export function LoginForm({ variant = "page", error, onSignIn }: LoginFormProps)
       <div>
         <h2 className="text-lg font-semibold">Sign in to your workspace</h2>
       </div>
+      {notice && (
+        <div className="rounded-lg border border-border bg-muted/50 px-3 py-2 text-sm text-foreground">
+          {notice}
+        </div>
+      )}
       {error && (
         <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
           {error}

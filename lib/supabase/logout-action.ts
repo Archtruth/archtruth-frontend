@@ -1,11 +1,9 @@
 import { redirect } from "next/navigation";
-import { getSupabaseServerClient } from "./server";
 
 export function createLogoutAction() {
   return async function logout() {
     "use server";
-    const supabase = getSupabaseServerClient();
-    await supabase.auth.signOut();
-    redirect("/login");
+    // Cookie clearing is done in /auth/sign-out (server action cannot clear Supabase cookies here).
+    redirect("/auth/sign-out?next=" + encodeURIComponent("/?login=1"));
   };
 }

@@ -45,6 +45,9 @@ export async function GET(request: NextRequest) {
     },
   });
 
+  // Drop any stale session (e.g. after account deletion, expired tokens) so OAuth + PKCE start clean.
+  await supabase.auth.signOut();
+
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "github",
     options: {

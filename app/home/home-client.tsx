@@ -68,7 +68,15 @@ export function HomeClient({ initialLoginOpen = false, initialError }: HomeClien
   const [navigating, setNavigating] = React.useState(false);
 
   const errorFromUrl = searchParams.get("error");
-  const error = errorFromUrl || initialError || null;
+  const noticeFromUrl = searchParams.get("notice");
+  const error =
+    errorFromUrl === "session_expired"
+      ? "Please sign in again to continue."
+      : errorFromUrl || initialError || null;
+  const signInNotice =
+    noticeFromUrl === "account_deleted"
+      ? "Your account was removed. Sign in with GitHub to create a fresh account."
+      : null;
 
   function setLoginOpenAndSyncUrl(open: boolean) {
     setLoginOpen(open);
@@ -78,6 +86,7 @@ export function HomeClient({ initialLoginOpen = false, initialError }: HomeClien
     } else {
       next.delete("login");
       next.delete("error");
+      next.delete("notice");
     }
     const qs = next.toString();
     router.replace(qs ? `${pathname}?${qs}` : pathname);
@@ -177,7 +186,7 @@ export function HomeClient({ initialLoginOpen = false, initialError }: HomeClien
 
       {/* Login Modal */}
       <Modal open={loginOpen} onOpenChange={setLoginOpenAndSyncUrl} title="Sign in to ArchTruth">
-        <LoginForm variant="embedded" error={error} onSignIn={handleSignIn} />
+        <LoginForm variant="embedded" error={error} notice={signInNotice} onSignIn={handleSignIn} />
       </Modal>
 
       {navigating && (
