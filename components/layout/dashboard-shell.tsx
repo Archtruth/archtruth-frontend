@@ -60,11 +60,14 @@ export function DashboardShell({
   const [orgDropdownOpen, setOrgDropdownOpen] = useState(false);
   const [navPending, startNavTransition] = useTransition();
 
+  // Primitive string (not orgOptions ref): parent passes a new array every RSC render.
+  const orgIdsFingerprint = orgOptions?.length ? orgOptions.map((o) => o.id).sort().join("|") : "";
+
   const orgId = useMemo(() => {
     const raw = searchParams.get("org_id");
     if (raw && orgOptions?.some((o) => o.id === raw)) return raw;
     return preferredOrgId || orgOptions?.[0]?.id || "";
-  }, [searchParams, orgOptions, preferredOrgId]);
+  }, [searchParams, preferredOrgId, orgIdsFingerprint]);
 
   const orgQuery = orgId ? `?org_id=${encodeURIComponent(orgId)}` : "";
 
@@ -110,14 +113,9 @@ export function DashboardShell({
     setMobileOpen(false);
   }, [pathname]);
 
-  /** Keep server cookie aligned with the URL when navigating via sidebar links. */
-  const searchKey = searchParams.toString();
-  useEffect(() => {
-    const id = new URLSearchParams(searchKey).get("org_id");
-    if (id && orgOptions?.some((o) => o.id === id)) {
-      void setPreferredOrganization(id);
-    }
-  }, [searchKey, orgOptions]);
+  // Do not call setPreferredOrganization from an effect: orgOptions is a new [] each RSC render,
+  // cookies().set in the server action revalidates the tree → infinite /orgs + action spam.
+  // Cookie is set when the user switches workspace (handleOrgSwitch); URL carries org_id for SSR.
 
   useEffect(() => {
     if (!orgDropdownOpen) return;
@@ -143,6 +141,7 @@ export function DashboardShell({
       <div className="px-4 pt-5 pb-3">
         <Link
           href={`/dashboard${orgQuery}`}
+          prefetch={false}
           className="flex items-center gap-2 rounded-lg text-sidebar-foreground outline-none ring-sidebar-ring transition-colors hover:text-sidebar-foreground focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar"
         >
           <div className="flex h-7 w-7 items-center justify-center rounded-md bg-sidebar-primary text-sidebar-primary-foreground">
@@ -195,7 +194,7 @@ export function DashboardShell({
           <Link
             key={item.label}
             href={item.href}
-            prefetch
+            prefetch={false}
             scroll={false}
             aria-current={isActive(item.href) ? "page" : undefined}
             className={navLinkClass(isActive(item.href))}
@@ -209,7 +208,7 @@ export function DashboardShell({
       <div className="border-t border-sidebar-border px-3 py-3">
         <Link
           href={settingsHref}
-          prefetch
+          prefetch={false}
           scroll={false}
           aria-current={isActive(settingsHref) ? "page" : undefined}
           className={navLinkClass(isActive(settingsHref))}

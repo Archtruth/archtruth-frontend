@@ -131,7 +131,7 @@ export function DashboardOverview({ orgId, orgName, userName, dashboardData, tok
       {/* Quick Actions */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {quickActions.map((action) => (
-          <Link key={action.label} href={action.href} className="block h-full" prefetch scroll={false}>
+          <Link key={action.label} href={action.href} className="block h-full" prefetch={false} scroll={false}>
             <Card className="h-full hover:shadow-md transition-shadow duration-200 cursor-pointer group">
               <CardContent className="p-5">
                 <div className="flex items-start gap-3">
