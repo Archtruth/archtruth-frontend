@@ -55,51 +55,97 @@ export function WikiClient({ orgId, wikiData, token, initialRepoId }: Props) {
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  /** Avoid re-running deep-link init on every repos/capabilities reference change (RSC/hydration). */
+  const deepLinkInitRef = useRef<string | null>(null);
+  const [deepLinkNoPages, setDeepLinkNoPages] = useState(false);
 
-  // Auto-select initial repo's first page
+  const contentRequestKey = useMemo(() => {
+    if (!selected) return "";
+    return selected.type === "org"
+      ? `o:${selected.fileName}`
+      : `w:${selected.repoId}:${encodeURIComponent(selected.slug)}`;
+  }, [selected]);
+
+  // Auto-select initial repo's first page (once per ?repo= id)
   useEffect(() => {
-    if (initialRepoId) {
-      const repo = repos.find((r) => r.id === initialRepoId);
-      if (repo && repo.wiki_pages.length > 0) {
-        setSelected({ type: "wiki", repoId: repo.id, slug: repo.wiki_pages[0].slug });
-        // Expand the capability that contains this repo
-        for (const cap of capabilities) {
-          if (cap.services?.some((s) => s.repository_id === repo.id)) {
-            setExpandedCaps(new Set([cap.id]));
-            break;
-          }
-        }
-        setExpandedRepos(new Set([repo.id]));
+    if (initialRepoId === undefined || !Number.isFinite(initialRepoId)) {
+      deepLinkInitRef.current = null;
+      setDeepLinkNoPages(false);
+      return;
+    }
+    const key = String(initialRepoId);
+    if (deepLinkInitRef.current === key) return;
+
+    const repo = repos.find((r) => r.id === initialRepoId);
+    if (!repo) {
+      if (repos.length > 0) {
+        deepLinkInitRef.current = key;
+        setDeepLinkNoPages(false);
+        setSelected(null);
+      }
+      return;
+    }
+
+    deepLinkInitRef.current = key;
+
+    for (const cap of capabilities) {
+      if (cap.services?.some((s) => s.repository_id === repo.id)) {
+        setExpandedCaps(new Set([cap.id]));
+        break;
       }
     }
+    setExpandedRepos(new Set([repo.id]));
+
+    if (repo.wiki_pages.length === 0) {
+      setDeepLinkNoPages(true);
+      setSelected(null);
+      setContent("");
+      return;
+    }
+
+    setDeepLinkNoPages(false);
+    setSelected({ type: "wiki", repoId: repo.id, slug: repo.wiki_pages[0].slug });
   }, [initialRepoId, repos, capabilities]);
 
-  // Fetch content when selection changes
+  // Fetch content when selection changes (stable key — not selected object identity)
   useEffect(() => {
-    if (!selected) return;
+    if (!contentRequestKey || !selected) return;
+    const sel = selected;
     let cancelled = false;
     setLoadingContent(true);
+    const ac = new AbortController();
+    const t = setTimeout(() => ac.abort(), 75_000);
 
     (async () => {
       try {
-        if (selected.type === "org") {
-          const presigned = await presignOrgDocument(orgId, selected.fileName, token);
-          const resp = await fetch(presigned.url, { cache: "no-store" });
+        if (sel.type === "org") {
+          const presigned = await presignOrgDocument(orgId, sel.fileName, token);
+          const resp = await fetch(presigned.url, { cache: "no-store", signal: ac.signal });
           if (!cancelled) setContent(resp.ok ? await resp.text() : "Failed to load document");
         } else {
-          const presigned = await presignWikiPage(selected.repoId, selected.slug, token);
-          const resp = await fetch(presigned.url, { cache: "no-store" });
+          const presigned = await presignWikiPage(sel.repoId, sel.slug, token);
+          const resp = await fetch(presigned.url, { cache: "no-store", signal: ac.signal });
           if (!cancelled) setContent(resp.ok ? await resp.text() : "Failed to load page");
         }
-      } catch {
-        if (!cancelled) setContent("Error loading content");
+      } catch (e: unknown) {
+        if (!cancelled) {
+          const aborted = e instanceof Error && e.name === "AbortError";
+          setContent(aborted ? "Load timed out. Try again or open another page." : "Error loading content");
+        }
       } finally {
+        clearTimeout(t);
         if (!cancelled) setLoadingContent(false);
       }
     })();
 
-    return () => { cancelled = true; };
-  }, [selected, orgId, token]);
+    return () => {
+      cancelled = true;
+      ac.abort();
+      clearTimeout(t);
+    };
+    // `selected` is read from the same render as `contentRequestKey`; do not list `selected` here
+    // or its new object identity retriggers fetches in a loop.
+  }, [contentRequestKey, orgId, token]);
 
   const toggleCap = (id: string) => {
     setExpandedCaps((prev) => {
@@ -359,7 +405,17 @@ export function WikiClient({ orgId, wikiData, token, initialRepoId }: Props) {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-6">
-        {!selected && (
+        {!selected && deepLinkNoPages && (
+          <div className="flex flex-col items-center justify-center h-full text-center max-w-md mx-auto px-4">
+            <FileText className="h-12 w-12 mb-4 text-muted-foreground opacity-40" />
+            <p className="text-lg font-medium">No wiki pages for this repository yet</p>
+            <p className="text-sm text-muted-foreground mt-2">
+              The scan finished, but no wiki pages were generated. Try syncing again from Repositories, or open another service from the sidebar.
+            </p>
+          </div>
+        )}
+
+        {!selected && !deepLinkNoPages && (
           <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
             <FileText className="h-12 w-12 mb-4 opacity-30" />
             <p className="text-lg font-medium">Select a page from the sidebar</p>
@@ -380,6 +436,13 @@ export function WikiClient({ orgId, wikiData, token, initialRepoId }: Props) {
           <article className="prose prose-slate dark:prose-invert max-w-none animate-in fade-in duration-200">
             <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
           </article>
+        )}
+
+        {selected && !loadingContent && !content && (
+          <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground max-w-md mx-auto">
+            <p className="text-lg font-medium">No content</p>
+            <p className="text-sm mt-2">This page loaded but the document is empty. Pick another page from the sidebar.</p>
+          </div>
         )}
       </div>
 

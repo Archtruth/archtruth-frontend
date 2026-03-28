@@ -35,6 +35,8 @@ export default async function WikiPage({ searchParams }: Props) {
   }
 
   const repoParam = Array.isArray(searchParams["repo"]) ? searchParams["repo"][0] : searchParams["repo"];
+  const parsedRepo = repoParam !== undefined && repoParam !== "" ? parseInt(String(repoParam), 10) : NaN;
+  const initialRepoId = Number.isFinite(parsedRepo) ? parsedRepo : undefined;
 
   let wikiData: any = null;
   try {
@@ -48,7 +50,7 @@ export default async function WikiPage({ searchParams }: Props) {
       orgId={orgId}
       wikiData={wikiData}
       token={token}
-      initialRepoId={repoParam ? parseInt(repoParam) : undefined}
+      initialRepoId={initialRepoId}
     />
   );
 }
