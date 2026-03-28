@@ -99,32 +99,30 @@ export function ReposList({
     try {
       let capId = selectedCapId;
       if (!capId && capName.trim()) {
-        const cap = await backendFetch<{ id: string }>(`/orgs/${orgId}/capabilities`, token, {
+        const created = await backendFetch<{ capability: { id: string } }>(`/orgs/${orgId}/capabilities`, token, {
           method: "POST",
           body: JSON.stringify({ name: capName.trim() }),
         });
-        capId = cap.id;
+        capId = created.capability.id;
       }
 
       const installId = initialInstallations[0]?.installation_id;
       for (const repoId of selectedToConnect) {
         const repo = allAvailableRepos.find((r: any) => r.id === repoId);
         if (!repo) continue;
-        await backendFetch("/installations/connect-repo", token, {
+        const connected = await backendFetch<{ repo_id: number }>("/installations/connect-repo", token, {
           method: "POST",
           body: JSON.stringify({
             installation_id: installId,
-            repo_id: repo.id,
+            github_repo_id: repo.id,
             full_name: repo.full_name,
-            default_branch: repo.default_branch || "main",
-            organization_id: orgId,
           }),
         });
         if (capId) {
           try {
             await backendFetch(`/orgs/${orgId}/capabilities/${capId}/services`, token, {
               method: "POST",
-              body: JSON.stringify({ repository_id: repo.id }),
+              body: JSON.stringify({ repository_id: connected.repo_id }),
             });
           } catch {}
         }

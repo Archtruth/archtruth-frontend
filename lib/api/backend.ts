@@ -270,12 +270,23 @@ export async function getWikiData(orgId: string, token: string) {
   }>(`/orgs/${orgId}/wiki-data`, token);
 }
 
+export type CreateCapabilityResponse = {
+  capability: {
+    id: string;
+    name: string;
+    description?: string | null;
+    parent_capability_id?: string | null;
+    level?: number;
+    nav_order?: number;
+  };
+};
+
 export async function createCapability(
   orgId: string,
   data: { name: string; description?: string; parent_capability_id?: string },
   token: string
 ) {
-  return backendFetch<any>(`/orgs/${orgId}/capabilities`, token, {
+  return backendFetch<CreateCapabilityResponse>(`/orgs/${orgId}/capabilities`, token, {
     method: "POST",
     body: JSON.stringify(data),
   });

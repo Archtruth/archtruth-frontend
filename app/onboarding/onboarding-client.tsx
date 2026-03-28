@@ -103,10 +103,11 @@ export function OnboardingClient({ githubOrgs, token, providerToken }: Props) {
 
     try {
       // Create capability
-      const cap = await backendFetch<{ id: string }>(`/orgs/${createdOrgId}/capabilities`, token, {
+      const createdCap = await backendFetch<{ capability: { id: string } }>(`/orgs/${createdOrgId}/capabilities`, token, {
         method: "POST",
         body: JSON.stringify({ name: capabilityName.trim() }),
       });
+      const capId = createdCap.capability.id;
 
       // Connect repos
       const installId = installations[0]?.installation_id;
@@ -114,22 +115,19 @@ export function OnboardingClient({ githubOrgs, token, providerToken }: Props) {
         const repo = availableRepos.find((r) => r.id === repoId);
         if (!repo) continue;
 
-        await backendFetch("/installations/connect-repo", token, {
+        const connected = await backendFetch<{ repo_id: number }>("/installations/connect-repo", token, {
           method: "POST",
           body: JSON.stringify({
             installation_id: installId,
-            repo_id: repo.id,
+            github_repo_id: repo.id,
             full_name: repo.full_name,
-            default_branch: repo.default_branch || "main",
-            organization_id: createdOrgId,
           }),
         });
 
-        // Assign to capability
         try {
-          await backendFetch(`/orgs/${createdOrgId}/capabilities/${cap.id}/services`, token, {
+          await backendFetch(`/orgs/${createdOrgId}/capabilities/${capId}/services`, token, {
             method: "POST",
-            body: JSON.stringify({ repository_id: repo.id }),
+            body: JSON.stringify({ repository_id: connected.repo_id }),
           });
         } catch {
           // Non-fatal
