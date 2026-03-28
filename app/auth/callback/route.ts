@@ -18,7 +18,9 @@ export async function GET(request: NextRequest) {
     return NextResponse.redirect(`${origin}/?login=1&error=config_error`);
   }
 
-  // Default to dashboard; we'll check orgs after auth
+  // Single redirect response: session cookies from exchangeCodeForSession must stay on THIS
+  // response. Returning a new NextResponse.redirect() for /onboarding used to drop cookies,
+  // so onboarding saw no session and sent users to ?error=session_expired.
   const response = NextResponse.redirect(`${origin}/dashboard`);
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
@@ -44,7 +46,6 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  // Check if user has orgs, redirect to onboarding if not
   if (backendUrl && data?.session?.access_token) {
     try {
       const orgsResp = await fetch(`${backendUrl}/orgs`, {
@@ -57,11 +58,11 @@ export async function GET(request: NextRequest) {
       if (orgsResp.ok) {
         const orgsData = await orgsResp.json();
         if (!orgsData.organizations || orgsData.organizations.length === 0) {
-          return NextResponse.redirect(`${origin}/onboarding`);
+          response.headers.set("Location", `${origin}/onboarding`);
         }
       }
     } catch {
-      // Non-fatal: proceed to dashboard
+      // Non-fatal: keep default Location (/dashboard)
     }
   }
 
